@@ -214,11 +214,10 @@ export default function InvoiceCreatePage() {
                       >
                         <FormControl>
                           <SelectTrigger data-testid="select-project">
-                            <SelectValue placeholder="Select project" />
+                            <SelectValue placeholder="No project" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">No project</SelectItem>
                           {projects?.map((project) => (
                             <SelectItem key={project.id} value={project.id}>
                               {project.name}
