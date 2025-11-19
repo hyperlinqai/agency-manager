@@ -1,0 +1,273 @@
+You are an expert full-stack developer.
+
+Build a production-ready internal web app for a digital marketing agency called “Agency Control Center”.
+
+Overall goal
+A single place to manage:
+- Clients and projects
+- Invoices and payments
+- Later phases: vendors, expenses, salaries, client portal, team & learning resources, and client off-boarding (archive).
+
+For now, fully implement ONLY PHASE 1 (Client Management + Invoicing) but keep the structure ready for later phases.
+
+Tech stack
+- Frontend: React + TypeScript + Vite, Tailwind CSS for styling.
+- Backend: Node.js + Express.
+- Database: SQLite with Prisma ORM (simple to run on Replit).
+- API style: REST JSON.
+- Auth: Very simple email + password login for internal users (no signup screen, seed one admin user).
+
+General UI/UX guidelines
+- Clean, spreadsheet-like layout, similar to Google Sheets.
+- Top navigation bar with app name and user menu.
+- Left sidebar with sections:
+  - Dashboard
+  - Clients
+  - Invoices
+  - (Placeholders for future sections: Vendors, Expenses, Salaries, Learning Hub, Client Portal)
+- Use tables with sticky header rows, filters, and sortable columns where it makes sense.
+- Use status badges with clear colors (e.g., Paid, Due, Overdue, Inactive).
+
+======================================
+PHASE 1 – CLIENT MANAGEMENT + INVOICING
+======================================
+
+Implement these features completely.
+
+1) Data model (Prisma schema)
+
+Create Prisma models for:
+
+User
+- id
+- name
+- email (unique)
+- passwordHash
+- role (ADMIN, MANAGER, STAFF)
+- createdAt, updatedAt
+
+Client
+- id
+- name
+- contactName
+- email
+- phone
+- companyWebsite
+- address
+- status (ACTIVE, INACTIVE, ARCHIVED)
+- notes (text)
+- createdAt, updatedAt
+
+Project
+- id
+- clientId (relation to Client)
+- name
+- scope (e.g. “Local SEO”, “Digital Marketing”, “Website Design”)
+- startDate
+- endDate (optional)
+- status (ACTIVE, ON_HOLD, COMPLETED, CANCELLED)
+- notes
+- createdAt, updatedAt
+
+Invoice
+- id
+- clientId
+- projectId (optional, but usually linked)
+- invoiceNumber (unique, human readable like INV-0001)
+- issueDate
+- dueDate
+- currency (default “INR”)
+- subtotal
+- taxAmount
+- totalAmount
+- amountPaid
+- balanceDue
+- status (DRAFT, SENT, PARTIALLY_PAID, PAID, OVERDUE)
+- notes
+- createdAt, updatedAt
+
+InvoiceLineItem
+- id
+- invoiceId
+- description
+- quantity
+- unitPrice
+- lineTotal
+
+Payment
+- id
+- invoiceId
+- paymentDate
+- amount
+- method (BANK_TRANSFER, UPI, CASH, CARD, OTHER)
+- reference
+- notes
+- createdAt
+
+Seed script:
+- One admin user: email “admin@agency.local”, password “admin123”.
+- 3–5 sample clients and projects.
+- A few sample invoices that resemble this table structure:
+  - Columns: Project, Scope, Invoice Value, Due Date, Paid, Balance, Next Due Date, Status.
+  - Include examples of Paid, Due, and Overdue invoices.
+
+2) Backend API
+
+Build Express routes under /api:
+
+Auth
+- POST /api/auth/login
+  - Input: email, password
+  - Output: JWT or session token.
+  - Protect all other routes behind auth middleware.
+
+Clients
+- GET /api/clients  (list with filters: status, search by name/email)
+- GET /api/clients/:id  (details with related projects and invoices)
+- POST /api/clients  (create)
+- PUT /api/clients/:id  (update)
+- PUT /api/clients/:id/status  (update status: ACTIVE, INACTIVE, ARCHIVED)
+- DELETE /api/clients/:id  (soft delete by setting status ARCHIVED)
+
+Projects
+- GET /api/projects  (optional: filter by clientId)
+- POST /api/projects
+- PUT /api/projects/:id
+
+Invoices
+- GET /api/invoices  (filters: clientId, status, date range, search by invoiceNumber)
+- GET /api/invoices/:id (include client, project, line items, payments)
+- POST /api/invoices
+  - Request: clientId, projectId (optional), issueDate, dueDate, line items, tax rate.
+  - Backend calculates subtotal, taxAmount, totalAmount, sets amountPaid=0, balanceDue=totalAmount, status=DRAFT or SENT.
+- PUT /api/invoices/:id
+  - Allow editing basic fields and line items while status is not PAID.
+- POST /api/invoices/:id/status
+  - Change status between DRAFT, SENT, PAID, etc.
+- POST /api/invoices/:id/payments
+  - Record a payment, update amountPaid and balanceDue, recalc status (PARTIALLY_PAID or PAID).
+  - If dueDate passed and balanceDue>0, status should be OVERDUE.
+
+Dashboard
+- GET /api/dashboard/summary
+  - Return:
+    - totalInvoiced (sum of all totalAmount)
+    - totalPaid
+    - totalOutstanding (sum of all balanceDue)
+    - thisMonthInvoiced
+    - thisMonthCollected
+    - countActiveClients
+    - countOverdueInvoices
+
+3) Frontend pages
+
+Authentication
+- Simple login page for internal users.
+- Store auth token in memory or localStorage.
+- Redirect to login if not authenticated.
+
+Layout
+- Main layout with sidebar and top bar.
+- Sidebar links: Dashboard, Clients, Invoices, (Vendors, Expenses, Salaries, Learning Hub as disabled placeholders).
+
+Dashboard page
+- Show cards with:
+  - Total Invoiced
+  - Total Paid
+  - Outstanding Amount
+  - Overdue Invoices count
+- Table: Upcoming invoice due dates (next 7–30 days).
+- Table: Recently created invoices or recent payments.
+
+Clients page
+- Table view with:
+  - Client Name
+  - Contact Person
+  - Email
+  - Phone
+  - Status (Active / Inactive / Archived)
+  - Total Invoiced
+  - Outstanding Amount
+- Controls:
+  - Search by name/email.
+  - Filter by status.
+  - Button “New Client”.
+- New/Edit Client form in a modal or separate page.
+
+Client detail page
+- Show client info at top, with ability to change status (Active/Inactive/Archived).
+- Tabs or sections:
+  - Overview (basic info, notes)
+  - Projects (table of projects)
+  - Invoices (table of invoices for this client: invoiceNumber, project, issueDate, dueDate, total, paid, balance, status)
+- “Add Project” button and simple project create form.
+- “Create Invoice” button that pre-selects this client.
+
+Invoices page
+- Table view similar to the screenshot provided:
+  - Columns: Project, Scope, Invoice Value, Due Date, Paid, Balance, Next Due Date (if using payment plans), Status.
+  - Also show client name, invoice number.
+- Filters:
+  - Client
+  - Status (All, Draft, Sent, Paid, Overdue)
+  - Date range.
+- “New Invoice” button.
+
+Create / Edit Invoice form
+- Step 1: Choose client.
+- Step 2: Choose project (optional; list only projects of that client).
+- Step 3: Invoice details:
+  - Invoice number (autogenerated but editable).
+  - Issue date, due date.
+- Step 4: Line items:
+  - Repeatable rows: description, quantity, unit price, calculated line total.
+  - Show Subtotal, Tax (enter rate, e.g., 18%), Total.
+- Buttons:
+  - Save as Draft
+  - Mark as Sent
+- On invoice detail view:
+  - Show read-only invoice info.
+  - Section to add payments (amount, date, method, reference).
+  - Show running balance, payment history, and status.
+
+Status logic
+- If balanceDue == 0 → status = PAID.
+- If dueDate < today AND balanceDue > 0 → status = OVERDUE.
+- If some payments but not fully paid and before dueDate → PARTIALLY_PAID.
+- If created but not yet sent → DRAFT.
+- If sent and unpaid but not overdue → SENT.
+
+Permissions (simple)
+- For now, allow all logged-in users to do everything.
+- Keep the role field for future phase with role-based access control.
+
+======================================
+LATER PHASES (just placeholders now)
+======================================
+
+Create empty routes/components (no full logic yet) so they can be implemented later:
+
+Vendors & Expenses
+- Models: Vendor, Expense, SalaryPayment.
+- Pages: Vendors list, Expenses list, Salaries list.
+
+Client Portal integration
+- For future: each client will have a portal URL for reports and asset uploads.
+- Add a “portalUrl” field on Client now, show as read-only.
+
+Team & Learning Hub
+- Placeholder route “/learning” for future knowledge base:
+  - Categories: “Onboarding”, “SEO”, “Meta Ads”, “Automation”.
+  - Store links and internal docs.
+
+Client off-boarding / archive
+- Use Client.status = ARCHIVED and ensure archived clients do not appear in “Active” lists by default.
+
+Important
+- Include clear instructions in README:
+  - How to run migrations (Prisma).
+  - How to run the dev server.
+  - Default admin login.
+- Make sure everything runs correctly inside a single Replit project.
+
+Now generate the complete Phase 1 implementation with this structure.
