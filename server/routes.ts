@@ -7,6 +7,7 @@ import {
   insertClientSchema,
   insertProjectSchema,
   insertPaymentSchema,
+  insertServiceSchema,
   insertVendorSchema,
   insertExpenseCategorySchema,
   insertExpenseSchema,
@@ -271,6 +272,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const payment = await storage.createPayment(validatedData);
       res.json(payment);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  // ============================================
+  // SERVICE ROUTES
+  // ============================================
+  app.get("/api/services", authenticateToken, async (req, res) => {
+    try {
+      const { status, category } = req.query;
+      const services = await storage.getServices({
+        status: status as string,
+        category: category as string,
+      });
+      res.json(services);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/services/:id", authenticateToken, async (req, res) => {
+    try {
+      const service = await storage.getServiceById(req.params.id);
+      if (!service) {
+        return res.status(404).send("Service not found");
+      }
+      res.json(service);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/services", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertServiceSchema.parse(req.body);
+      const service = await storage.createService(validatedData);
+      res.json(service);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.put("/api/services/:id", authenticateToken, async (req, res) => {
+    try {
+      const service = await storage.updateService(req.params.id, req.body);
+      res.json(service);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.post("/api/services/:id/status", authenticateToken, async (req, res) => {
+    try {
+      const { status } = req.body;
+      if (!status) {
+        return res.status(400).send("Status is required");
+      }
+      const service = await storage.updateServiceStatus(req.params.id, status);
+      res.json(service);
     } catch (error: any) {
       res.status(400).send(error.message);
     }
