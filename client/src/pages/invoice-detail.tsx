@@ -226,7 +226,7 @@ export default function InvoiceDetailPage() {
                           {formatDate(payment.paymentDate)}
                         </p>
                         <p className="text-xs text-muted-foreground" data-testid={`payment-method-${payment.id}`}>
-                          {payment.method.replace(/_/g, " ")}
+                          {payment.method ? payment.method.replace(/_/g, " ") : "—"}
                         </p>
                         {payment.reference && (
                           <p className="text-xs text-muted-foreground" data-testid={`payment-reference-${payment.id}`}>

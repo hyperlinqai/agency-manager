@@ -8,10 +8,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DollarSign, TrendingUp, AlertCircle, Users } from "lucide-react";
+import { DollarSign, TrendingUp, AlertCircle, Users, TrendingDown, Wallet } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { DashboardSummary, InvoiceWithRelations } from "@shared/schema";
+import type { DashboardSummary, InvoiceWithRelations, FinancialSummary } from "@shared/schema";
 import { formatDate, formatCurrency } from "@/lib/utils";
 
 export default function DashboardPage() {
@@ -21,6 +21,10 @@ export default function DashboardPage() {
 
   const { data: upcomingInvoices, isLoading: invoicesLoading } = useQuery<InvoiceWithRelations[]>({
     queryKey: ["/api/invoices/upcoming"],
+  });
+
+  const { data: financialSummary, isLoading: financialLoading } = useQuery<FinancialSummary>({
+    queryKey: ["/api/dashboard/financial"],
   });
 
 
@@ -132,6 +136,72 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Financial Overview */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg font-medium">Financial Overview (All Time)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {financialLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} className="h-24 w-full" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="border rounded-lg p-4">
+                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-2">
+                  <TrendingUp className="h-4 w-4" />
+                  <span>Total Income</span>
+                </div>
+                <div className="text-2xl font-semibold font-mono text-green-600" data-testid="metric-total-income">
+                  {formatCurrency(financialSummary?.totalIncome || 0)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">From invoices</p>
+              </div>
+              <div className="border rounded-lg p-4">
+                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-2">
+                  <TrendingDown className="h-4 w-4" />
+                  <span>Total Expenses</span>
+                </div>
+                <div className="text-2xl font-semibold font-mono text-red-600" data-testid="metric-total-expenses">
+                  {formatCurrency(financialSummary?.totalExpenses || 0)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">All business costs</p>
+              </div>
+              <div className="border rounded-lg p-4">
+                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-2">
+                  <Wallet className="h-4 w-4" />
+                  <span>Net Profit/Loss</span>
+                </div>
+                <div
+                  className={`text-2xl font-semibold font-mono ${
+                    (financialSummary?.netProfit || 0) >= 0 ? "text-green-600" : "text-red-600"
+                  }`}
+                  data-testid="metric-net-profit"
+                >
+                  {formatCurrency(financialSummary?.netProfit || 0)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Income - Expenses</p>
+              </div>
+              <div className="border rounded-lg p-4">
+                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-2">
+                  <DollarSign className="h-4 w-4" />
+                  <span>Profit Margin</span>
+                </div>
+                <div className="text-2xl font-semibold" data-testid="metric-profit-margin">
+                  {financialSummary?.totalIncome && financialSummary.totalIncome > 0
+                    ? `${((financialSummary.netProfit / financialSummary.totalIncome) * 100).toFixed(1)}%`
+                    : "0%"}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Net margin</p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Upcoming Invoices */}
       <Card>

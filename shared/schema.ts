@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { pgTable, varchar, text, timestamp, decimal, pgEnum } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
+import { createInsertSchema } from "drizzle-zod";
 
 // ============================================
 // USER
@@ -370,11 +373,11 @@ export type InsertSalaryPayment = z.infer<typeof insertSalaryPaymentSchema>;
 // FINANCIAL DASHBOARD
 // ============================================
 export interface FinancialSummary {
-  totalInvoiced: number;
-  totalCollected: number;
-  totalExpenses: number;
-  totalSalaries: number;
-  netProfit: number;
+  totalIncome: number;  // Total payments collected
+  totalExpenses: number;  // Total expenses + salaries combined
+  netProfit: number;  // Income - Expenses
+  totalInvoiced: number;  // For reference
+  totalSalaries: number;  // For reference
   breakdownByCategory: Array<{
     categoryName: string;
     totalAmount: number;
@@ -397,3 +400,251 @@ export interface ExpenseWithRelations extends Expense {
   vendorName?: string;
   categoryName?: string;
 }
+
+// ============================================
+// DRIZZLE TABLE DEFINITIONS
+// ============================================
+
+// Enums
+export const userRoleEnum = pgEnum("user_role", userRoles);
+export const clientStatusEnum = pgEnum("client_status", clientStatuses);
+export const projectStatusEnum = pgEnum("project_status", projectStatuses);
+export const invoiceStatusEnum = pgEnum("invoice_status", invoiceStatuses);
+export const paymentMethodEnum = pgEnum("payment_method", paymentMethods);
+export const vendorCategoryEnum = pgEnum("vendor_category", vendorCategories);
+export const vendorStatusEnum = pgEnum("vendor_status", vendorStatuses);
+export const expenseStatusEnum = pgEnum("expense_status", expenseStatuses);
+export const teamMemberStatusEnum = pgEnum("team_member_status", teamMemberStatuses);
+export const salaryStatusEnum = pgEnum("salary_status", salaryStatuses);
+
+// Users table
+export const users = pgTable("users", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  role: userRoleEnum("role").notNull().default("STAFF"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Clients table
+export const clients = pgTable("clients", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  contactName: varchar("contact_name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  phone: varchar("phone", { length: 50 }).notNull(),
+  companyWebsite: text("company_website").notNull().default(""),
+  address: text("address").notNull().default(""),
+  status: clientStatusEnum("status").notNull().default("ACTIVE"),
+  notes: text("notes").notNull().default(""),
+  portalUrl: text("portal_url").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Projects table
+export const projects = pgTable("projects", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  clientId: varchar("client_id", { length: 21 }).notNull().references(() => clients.id),
+  name: varchar("name", { length: 255 }).notNull(),
+  scope: text("scope").notNull(),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date"),
+  status: projectStatusEnum("status").notNull().default("ACTIVE"),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Invoices table
+export const invoices = pgTable("invoices", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  clientId: varchar("client_id", { length: 21 }).notNull().references(() => clients.id),
+  projectId: varchar("project_id", { length: 21 }).references(() => projects.id),
+  invoiceNumber: varchar("invoice_number", { length: 50 }).notNull().unique(),
+  issueDate: timestamp("issue_date").notNull(),
+  dueDate: timestamp("due_date").notNull(),
+  currency: varchar("currency", { length: 10 }).notNull().default("INR"),
+  subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
+  taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  amountPaid: decimal("amount_paid", { precision: 12, scale: 2 }).notNull().default("0"),
+  balanceDue: decimal("balance_due", { precision: 12, scale: 2 }).notNull().default("0"),
+  status: invoiceStatusEnum("status").notNull().default("DRAFT"),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Invoice Line Items table
+export const invoiceLineItems = pgTable("invoice_line_items", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  invoiceId: varchar("invoice_id", { length: 21 }).notNull().references(() => invoices.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull().default("1"),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull().default("0"),
+  lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull().default("0"),
+});
+
+// Payments table
+export const payments = pgTable("payments", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  invoiceId: varchar("invoice_id", { length: 21 }).notNull().references(() => invoices.id, { onDelete: "cascade" }),
+  paymentDate: timestamp("payment_date").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  method: paymentMethodEnum("method").notNull(),
+  reference: text("reference").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Vendors table
+export const vendors = pgTable("vendors", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  contactName: varchar("contact_name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  phone: varchar("phone", { length: 50 }).notNull(),
+  website: text("website").notNull().default(""),
+  address: text("address").notNull().default(""),
+  category: vendorCategoryEnum("category").notNull().default("OTHER"),
+  status: vendorStatusEnum("status").notNull().default("ACTIVE"),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Expense Categories table
+export const expenseCategories = pgTable("expense_categories", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  code: varchar("code", { length: 10 }).notNull().unique(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Expenses table
+export const expenses = pgTable("expenses", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  vendorId: varchar("vendor_id", { length: 21 }).references(() => vendors.id),
+  categoryId: varchar("category_id", { length: 21 }).notNull().references(() => expenseCategories.id),
+  description: text("description").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 10 }).notNull().default("INR"),
+  expenseDate: timestamp("expense_date").notNull(),
+  dueDate: timestamp("due_date"),
+  paidDate: timestamp("paid_date"),
+  status: expenseStatusEnum("status").notNull().default("PLANNED"),
+  paymentMethod: paymentMethodEnum("payment_method"),
+  reference: text("reference").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Team Members table
+export const teamMembers = pgTable("team_members", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  roleTitle: varchar("role_title", { length: 255 }).notNull(),
+  status: teamMemberStatusEnum("status").notNull().default("ACTIVE"),
+  baseSalary: decimal("base_salary", { precision: 12, scale: 2 }).notNull().default("0"),
+  joinedDate: timestamp("joined_date").notNull(),
+  exitDate: timestamp("exit_date"),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Salary Payments table
+export const salaryPayments = pgTable("salary_payments", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  teamMemberId: varchar("team_member_id", { length: 21 }).notNull().references(() => teamMembers.id),
+  month: varchar("month", { length: 7 }).notNull(),
+  paymentDate: timestamp("payment_date"),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 10 }).notNull().default("INR"),
+  status: salaryStatusEnum("status").notNull().default("PENDING"),
+  paymentMethod: paymentMethodEnum("payment_method"),
+  reference: text("reference").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ============================================
+// DRIZZLE RELATIONS
+// ============================================
+
+export const clientsRelations = relations(clients, ({ many }) => ({
+  projects: many(projects),
+  invoices: many(invoices),
+}));
+
+export const projectsRelations = relations(projects, ({ one, many }) => ({
+  client: one(clients, {
+    fields: [projects.clientId],
+    references: [clients.id],
+  }),
+  invoices: many(invoices),
+}));
+
+export const invoicesRelations = relations(invoices, ({ one, many }) => ({
+  client: one(clients, {
+    fields: [invoices.clientId],
+    references: [clients.id],
+  }),
+  project: one(projects, {
+    fields: [invoices.projectId],
+    references: [projects.id],
+  }),
+  lineItems: many(invoiceLineItems),
+  payments: many(payments),
+}));
+
+export const invoiceLineItemsRelations = relations(invoiceLineItems, ({ one }) => ({
+  invoice: one(invoices, {
+    fields: [invoiceLineItems.invoiceId],
+    references: [invoices.id],
+  }),
+}));
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  invoice: one(invoices, {
+    fields: [payments.invoiceId],
+    references: [invoices.id],
+  }),
+}));
+
+export const vendorsRelations = relations(vendors, ({ many }) => ({
+  expenses: many(expenses),
+}));
+
+export const expenseCategoriesRelations = relations(expenseCategories, ({ many }) => ({
+  expenses: many(expenses),
+}));
+
+export const expensesRelations = relations(expenses, ({ one }) => ({
+  vendor: one(vendors, {
+    fields: [expenses.vendorId],
+    references: [vendors.id],
+  }),
+  category: one(expenseCategories, {
+    fields: [expenses.categoryId],
+    references: [expenseCategories.id],
+  }),
+}));
+
+export const teamMembersRelations = relations(teamMembers, ({ many }) => ({
+  salaryPayments: many(salaryPayments),
+}));
+
+export const salaryPaymentsRelations = relations(salaryPayments, ({ one }) => ({
+  teamMember: one(teamMembers, {
+    fields: [salaryPayments.teamMemberId],
+    references: [teamMembers.id],
+  }),
+}));

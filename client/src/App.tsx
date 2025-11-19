@@ -15,6 +15,9 @@ import ClientDetailPage from "@/pages/client-detail";
 import InvoicesPage from "@/pages/invoices";
 import InvoiceCreatePage from "@/pages/invoice-create";
 import InvoiceDetailPage from "@/pages/invoice-detail";
+import VendorsPage from "@/pages/vendors";
+import ExpensesPage from "@/pages/expenses";
+import TeamSalariesPage from "@/pages/team-salaries";
 
 function Router() {
   return (
@@ -59,6 +62,27 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <InvoiceDetailPage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/vendors">
+        {() => (
+          <ProtectedRoute>
+            <VendorsPage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/expenses">
+        {() => (
+          <ProtectedRoute>
+            <ExpensesPage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/team-salaries">
+        {() => (
+          <ProtectedRoute>
+            <TeamSalariesPage />
           </ProtectedRoute>
         )}
       </Route>

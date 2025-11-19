@@ -305,7 +305,259 @@ export async function seedDatabase() {
     });
 
     console.log("Created 6 sample invoices with various statuses");
-    console.log("✅ Database seeded successfully!");
+
+    // ==== PHASE 2: Expense Categories ====
+    const catSoftware = await storage.createExpenseCategory({
+      name: "Software & Tools",
+      code: "SOFT",
+    });
+
+    const catAdvertising = await storage.createExpenseCategory({
+      name: "Advertising",
+      code: "ADV",
+    });
+
+    const catOffice = await storage.createExpenseCategory({
+      name: "Office & Admin",
+      code: "OFFICE",
+    });
+
+    const catSalaries = await storage.createExpenseCategory({
+      name: "Salaries",
+      code: "SAL",
+    });
+
+    console.log("Created 4 expense categories");
+
+    // ==== PHASE 2: Vendors ====
+    const vendorMeta = await storage.createVendor({
+      name: "Meta Ads",
+      contactName: "Support Team",
+      email: "support@meta.com",
+      phone: "+1-650-543-4800",
+      website: "https://business.facebook.com",
+      address: "1 Meta Way, Menlo Park, CA 94025",
+      category: "MEDIA_BUY",
+      status: "ACTIVE",
+      notes: "Facebook and Instagram advertising platform",
+    });
+
+    const vendorGoogle = await storage.createVendor({
+      name: "Google Ads",
+      contactName: "Support Team",
+      email: "support@google.com",
+      phone: "+1-866-246-6453",
+      website: "https://ads.google.com",
+      address: "1600 Amphitheatre Parkway, Mountain View, CA 94043",
+      category: "MEDIA_BUY",
+      status: "ACTIVE",
+      notes: "Google advertising platform",
+    });
+
+    const vendorFreelancer = await storage.createVendor({
+      name: "Freelance Designer - Arjun Patel",
+      contactName: "Arjun Patel",
+      email: "arjun.design@gmail.com",
+      phone: "+91 98765 99999",
+      website: "",
+      address: "Pune, Maharashtra",
+      category: "FREELANCER",
+      status: "ACTIVE",
+      notes: "Graphic designer for social media content",
+    });
+
+    console.log("Created 3 vendors");
+
+    // ==== PHASE 2: Team Members ====
+    const teamMember1 = await storage.createTeamMember({
+      name: "Sneha Reddy",
+      email: "sneha@agency.local",
+      roleTitle: "SEO Specialist",
+      status: "ACTIVE",
+      baseSalary: 45000,
+      joinedDate: new Date("2023-06-01"),
+      exitDate: null,
+      notes: "Senior SEO specialist, handles all client SEO campaigns",
+    });
+
+    const teamMember2 = await storage.createTeamMember({
+      name: "Rahul Verma",
+      email: "rahul@agency.local",
+      roleTitle: "Media Buyer",
+      status: "ACTIVE",
+      baseSalary: 50000,
+      joinedDate: new Date("2023-08-15"),
+      exitDate: null,
+      notes: "Manages all Meta and Google Ads campaigns",
+    });
+
+    const teamMember3 = await storage.createTeamMember({
+      name: "Kavita Menon",
+      email: "kavita@agency.local",
+      roleTitle: "Content Writer",
+      status: "ACTIVE",
+      baseSalary: 35000,
+      joinedDate: new Date("2024-01-10"),
+      exitDate: null,
+      notes: "Content creation for SEO and social media",
+    });
+
+    console.log("Created 3 team members");
+
+    // ==== PHASE 2: Expenses ====
+    await storage.createExpense({
+      vendorId: vendorMeta.id,
+      categoryId: catAdvertising.id,
+      description: "Meta Ads spend for Fashion Hub India campaign - January 2024",
+      amount: 75000,
+      currency: "INR",
+      expenseDate: new Date("2024-01-25"),
+      dueDate: null,
+      paidDate: new Date("2024-01-26"),
+      status: "PAID",
+      paymentMethod: "CARD",
+      reference: "META-JAN-2024",
+      notes: "Facebook and Instagram ads for client Fashion Hub India",
+    });
+
+    await storage.createExpense({
+      vendorId: vendorGoogle.id,
+      categoryId: catAdvertising.id,
+      description: "Google Ads spend for TechStart Solutions - January 2024",
+      amount: 50000,
+      currency: "INR",
+      expenseDate: new Date("2024-01-28"),
+      dueDate: null,
+      paidDate: new Date("2024-01-30"),
+      status: "PAID",
+      paymentMethod: "CARD",
+      reference: "GADS-JAN-2024",
+      notes: "Search and Display ads for client TechStart",
+    });
+
+    await storage.createExpense({
+      vendorId: vendorFreelancer.id,
+      categoryId: catAdvertising.id,
+      description: "Social media graphics design - 10 posts",
+      amount: 15000,
+      currency: "INR",
+      expenseDate: new Date("2024-02-05"),
+      dueDate: new Date("2024-02-15"),
+      paidDate: new Date("2024-02-10"),
+      status: "PAID",
+      paymentMethod: "UPI",
+      reference: "UPI-ARJUN-001",
+      notes: "Instagram and Facebook post designs for February campaigns",
+    });
+
+    await storage.createExpense({
+      vendorId: null,
+      categoryId: catOffice.id,
+      description: "Office supplies and stationery",
+      amount: 8000,
+      currency: "INR",
+      expenseDate: new Date("2024-02-01"),
+      dueDate: null,
+      paidDate: new Date("2024-02-02"),
+      status: "PAID",
+      paymentMethod: "CASH",
+      reference: "",
+      notes: "Monthly office supplies purchase",
+    });
+
+    await storage.createExpense({
+      vendorId: vendorMeta.id,
+      categoryId: catAdvertising.id,
+      description: "Meta Ads spend for Fashion Hub India campaign - February 2024",
+      amount: 80000,
+      currency: "INR",
+      expenseDate: new Date("2024-02-25"),
+      dueDate: new Date("2024-03-05"),
+      paidDate: null,
+      status: "DUE",
+      paymentMethod: null,
+      reference: "",
+      notes: "Pending payment for February ads",
+    });
+
+    console.log("Created 5 sample expenses");
+
+    // ==== PHASE 2: Salary Payments ====
+    await storage.createSalaryPayment({
+      teamMemberId: teamMember1.id,
+      month: "2024-01",
+      paymentDate: new Date("2024-02-01"),
+      amount: 45000,
+      currency: "INR",
+      status: "PAID",
+      paymentMethod: "BANK_TRANSFER",
+      reference: "SAL-JAN-2024-SNEHA",
+      notes: "January 2024 salary",
+    });
+
+    await storage.createSalaryPayment({
+      teamMemberId: teamMember2.id,
+      month: "2024-01",
+      paymentDate: new Date("2024-02-01"),
+      amount: 50000,
+      currency: "INR",
+      status: "PAID",
+      paymentMethod: "BANK_TRANSFER",
+      reference: "SAL-JAN-2024-RAHUL",
+      notes: "January 2024 salary",
+    });
+
+    await storage.createSalaryPayment({
+      teamMemberId: teamMember3.id,
+      month: "2024-01",
+      paymentDate: new Date("2024-02-01"),
+      amount: 35000,
+      currency: "INR",
+      status: "PAID",
+      paymentMethod: "BANK_TRANSFER",
+      reference: "SAL-JAN-2024-KAVITA",
+      notes: "January 2024 salary",
+    });
+
+    await storage.createSalaryPayment({
+      teamMemberId: teamMember1.id,
+      month: "2024-02",
+      paymentDate: new Date("2024-03-01"),
+      amount: 45000,
+      currency: "INR",
+      status: "PAID",
+      paymentMethod: "BANK_TRANSFER",
+      reference: "SAL-FEB-2024-SNEHA",
+      notes: "February 2024 salary",
+    });
+
+    await storage.createSalaryPayment({
+      teamMemberId: teamMember2.id,
+      month: "2024-02",
+      paymentDate: new Date("2024-03-01"),
+      amount: 50000,
+      currency: "INR",
+      status: "PAID",
+      paymentMethod: "BANK_TRANSFER",
+      reference: "SAL-FEB-2024-RAHUL",
+      notes: "February 2024 salary",
+    });
+
+    await storage.createSalaryPayment({
+      teamMemberId: teamMember3.id,
+      month: "2024-02",
+      paymentDate: null,
+      amount: 35000,
+      currency: "INR",
+      status: "PENDING",
+      paymentMethod: null,
+      reference: "",
+      notes: "February 2024 salary - pending",
+    });
+
+    console.log("Created 6 salary payment records");
+
+    console.log("\n✅ Database seeded successfully with Phase 1 & Phase 2 data!");
     console.log("\nLogin credentials:");
     console.log("Email: admin@agency.local");
     console.log("Password: admin123");

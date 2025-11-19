@@ -7,6 +7,11 @@ import {
   insertClientSchema,
   insertProjectSchema,
   insertPaymentSchema,
+  insertVendorSchema,
+  insertExpenseCategorySchema,
+  insertExpenseSchema,
+  insertTeamMemberSchema,
+  insertSalaryPaymentSchema,
 } from "@shared/schema";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "development-secret-key";
@@ -280,6 +285,319 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(summary);
     } catch (error: any) {
       res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/dashboard/financial", authenticateToken, async (req, res) => {
+    try {
+      const { fromDate, toDate } = req.query;
+      const summary = await storage.getFinancialSummary({
+        fromDate: fromDate as string,
+        toDate: toDate as string,
+      });
+      res.json(summary);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // ============================================
+  // VENDOR ROUTES
+  // ============================================
+  app.get("/api/vendors", authenticateToken, async (req, res) => {
+    try {
+      const { status, search, category } = req.query;
+      const vendors = await storage.getVendors({
+        status: status as string,
+        search: search as string,
+        category: category as string,
+      });
+      res.json(vendors);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/vendors/:id", authenticateToken, async (req, res) => {
+    try {
+      const vendor = await storage.getVendorById(req.params.id);
+      if (!vendor) {
+        return res.status(404).send("Vendor not found");
+      }
+      res.json(vendor);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/vendors", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertVendorSchema.parse(req.body);
+      const vendor = await storage.createVendor(validatedData);
+      res.json(vendor);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.put("/api/vendors/:id", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertVendorSchema.partial().parse(req.body);
+      const vendor = await storage.updateVendor(req.params.id, validatedData);
+      res.json(vendor);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.put("/api/vendors/:id/status", authenticateToken, async (req, res) => {
+    try {
+      const { status } = req.body;
+      if (!status) {
+        return res.status(400).send("Status is required");
+      }
+      const vendor = await storage.updateVendorStatus(req.params.id, status);
+      res.json(vendor);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  // ============================================
+  // EXPENSE CATEGORY ROUTES
+  // ============================================
+  app.get("/api/expense-categories", authenticateToken, async (req, res) => {
+    try {
+      const categories = await storage.getExpenseCategories();
+      res.json(categories);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/expense-categories/:id", authenticateToken, async (req, res) => {
+    try {
+      const category = await storage.getExpenseCategoryById(req.params.id);
+      if (!category) {
+        return res.status(404).send("Expense category not found");
+      }
+      res.json(category);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/expense-categories", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertExpenseCategorySchema.parse(req.body);
+      const category = await storage.createExpenseCategory(validatedData);
+      res.json(category);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.put("/api/expense-categories/:id", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertExpenseCategorySchema.partial().parse(req.body);
+      const category = await storage.updateExpenseCategory(req.params.id, validatedData);
+      res.json(category);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  // ============================================
+  // EXPENSE ROUTES
+  // ============================================
+  app.get("/api/expenses", authenticateToken, async (req, res) => {
+    try {
+      const { fromDate, toDate, vendorId, categoryId, status } = req.query;
+      const expenses = await storage.getExpenses({
+        fromDate: fromDate as string,
+        toDate: toDate as string,
+        vendorId: vendorId as string,
+        categoryId: categoryId as string,
+        status: status as string,
+      });
+      res.json(expenses);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/expenses/:id", authenticateToken, async (req, res) => {
+    try {
+      const expense = await storage.getExpenseById(req.params.id);
+      if (!expense) {
+        return res.status(404).send("Expense not found");
+      }
+      res.json(expense);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/expenses", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertExpenseSchema.parse(req.body);
+      const expense = await storage.createExpense(validatedData);
+      res.json(expense);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.put("/api/expenses/:id", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertExpenseSchema.partial().parse(req.body);
+      const expense = await storage.updateExpense(req.params.id, validatedData);
+      res.json(expense);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.post("/api/expenses/:id/mark-paid", authenticateToken, async (req, res) => {
+    try {
+      const { paymentDate, paymentMethod, reference } = req.body;
+      if (!paymentDate || !paymentMethod) {
+        return res.status(400).send("Payment date and method are required");
+      }
+      const expense = await storage.markExpensePaid(req.params.id, {
+        paymentDate: new Date(paymentDate),
+        paymentMethod,
+        reference: reference || "",
+      });
+      res.json(expense);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  // ============================================
+  // TEAM MEMBER ROUTES
+  // ============================================
+  app.get("/api/team-members", authenticateToken, async (req, res) => {
+    try {
+      const { status } = req.query;
+      const members = await storage.getTeamMembers({
+        status: status as string,
+      });
+      res.json(members);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/team-members/:id", authenticateToken, async (req, res) => {
+    try {
+      const member = await storage.getTeamMemberById(req.params.id);
+      if (!member) {
+        return res.status(404).send("Team member not found");
+      }
+      res.json(member);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/team-members", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertTeamMemberSchema.parse(req.body);
+      const member = await storage.createTeamMember(validatedData);
+      res.json(member);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.put("/api/team-members/:id", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertTeamMemberSchema.partial().parse(req.body);
+      const member = await storage.updateTeamMember(req.params.id, validatedData);
+      res.json(member);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.put("/api/team-members/:id/status", authenticateToken, async (req, res) => {
+    try {
+      const { status } = req.body;
+      if (!status) {
+        return res.status(400).send("Status is required");
+      }
+      const member = await storage.updateTeamMemberStatus(req.params.id, status);
+      res.json(member);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  // ============================================
+  // SALARY PAYMENT ROUTES
+  // ============================================
+  app.get("/api/salaries", authenticateToken, async (req, res) => {
+    try {
+      const { teamMemberId, month, status } = req.query;
+      const salaries = await storage.getSalaryPayments({
+        teamMemberId: teamMemberId as string,
+        month: month as string,
+        status: status as string,
+      });
+      res.json(salaries);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/salaries/:id", authenticateToken, async (req, res) => {
+    try {
+      const salary = await storage.getSalaryPaymentById(req.params.id);
+      if (!salary) {
+        return res.status(404).send("Salary payment not found");
+      }
+      res.json(salary);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/salaries", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertSalaryPaymentSchema.parse(req.body);
+      const salary = await storage.createSalaryPayment(validatedData);
+      res.json(salary);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.put("/api/salaries/:id", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertSalaryPaymentSchema.partial().parse(req.body);
+      const salary = await storage.updateSalaryPayment(req.params.id, validatedData);
+      res.json(salary);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.post("/api/salaries/:id/mark-paid", authenticateToken, async (req, res) => {
+    try {
+      const { paymentDate, paymentMethod, reference } = req.body;
+      if (!paymentDate || !paymentMethod) {
+        return res.status(400).send("Payment date and method are required");
+      }
+      const salary = await storage.markSalaryPaid(req.params.id, {
+        paymentDate: new Date(paymentDate),
+        paymentMethod,
+        reference: reference || "",
+      });
+      res.json(salary);
+    } catch (error: any) {
+      res.status(400).send(error.message);
     }
   });
 

@@ -30,12 +30,12 @@ const activeItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, testId: "link-dashboard" },
   { title: "Clients", url: "/clients", icon: Users, testId: "link-clients" },
   { title: "Invoices", url: "/invoices", icon: FileText, testId: "link-invoices" },
+  { title: "Vendors", url: "/vendors", icon: Briefcase, testId: "link-vendors" },
+  { title: "Expenses", url: "/expenses", icon: CreditCard, testId: "link-expenses" },
+  { title: "Team & Salaries", url: "/team-salaries", icon: DollarSign, testId: "link-team-salaries" },
 ];
 
 const placeholderItems = [
-  { title: "Vendors", url: "#", icon: Briefcase, testId: "link-vendors-disabled" },
-  { title: "Expenses", url: "#", icon: CreditCard, testId: "link-expenses-disabled" },
-  { title: "Salaries", url: "#", icon: DollarSign, testId: "link-salaries-disabled" },
   { title: "Learning Hub", url: "#", icon: BookOpen, testId: "link-learning-disabled" },
   { title: "Client Portal", url: "#", icon: Globe, testId: "link-portal-disabled" },
 ];
