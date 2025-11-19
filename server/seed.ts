@@ -329,6 +329,89 @@ export async function seedDatabase() {
 
     console.log("Created 4 expense categories");
 
+    // ==== Services ====
+    await storage.createService({
+      name: "SEO Optimization",
+      description: "Comprehensive search engine optimization including keyword research, on-page optimization, and monthly reporting",
+      category: "SEO",
+      defaultPrice: 25000,
+      currency: "INR",
+      unit: "Month",
+      status: "ACTIVE",
+    });
+
+    await storage.createService({
+      name: "Social Media Management",
+      description: "Complete social media management across Facebook, Instagram, LinkedIn including content creation and community management",
+      category: "SOCIAL_MEDIA",
+      defaultPrice: 20000,
+      currency: "INR",
+      unit: "Month",
+      status: "ACTIVE",
+    });
+
+    await storage.createService({
+      name: "Content Writing",
+      description: "Professional blog posts, articles, and website content optimized for SEO",
+      category: "CONTENT",
+      defaultPrice: 3000,
+      currency: "INR",
+      unit: "Article",
+      status: "ACTIVE",
+    });
+
+    await storage.createService({
+      name: "Google Ads Campaign Management",
+      description: "Complete Google Ads campaign setup, management, and optimization",
+      category: "ADVERTISING",
+      defaultPrice: 15000,
+      currency: "INR",
+      unit: "Month",
+      status: "ACTIVE",
+    });
+
+    await storage.createService({
+      name: "Social Media Ad Campaign",
+      description: "Facebook and Instagram advertising campaign creation and management",
+      category: "ADVERTISING",
+      defaultPrice: 12000,
+      currency: "INR",
+      unit: "Month",
+      status: "ACTIVE",
+    });
+
+    await storage.createService({
+      name: "Website Design & Development",
+      description: "Custom responsive website design and development",
+      category: "DEVELOPMENT",
+      defaultPrice: 80000,
+      currency: "INR",
+      unit: "Project",
+      status: "ACTIVE",
+    });
+
+    await storage.createService({
+      name: "Graphic Design - Social Media",
+      description: "Custom graphic designs for social media posts and stories",
+      category: "DESIGN",
+      defaultPrice: 1500,
+      currency: "INR",
+      unit: "Design",
+      status: "ACTIVE",
+    });
+
+    await storage.createService({
+      name: "Marketing Consultation",
+      description: "Strategic digital marketing consultation and planning session",
+      category: "CONSULTING",
+      defaultPrice: 5000,
+      currency: "INR",
+      unit: "Hour",
+      status: "ACTIVE",
+    });
+
+    console.log("Created 8 sample services");
+
     // ==== PHASE 2: Vendors ====
     const vendorMeta = await storage.createVendor({
       name: "Meta Ads",
