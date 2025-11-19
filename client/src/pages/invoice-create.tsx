@@ -1,0 +1,479 @@
+import { useState, useEffect } from "react";
+import { useForm, useFieldArray } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { z } from "zod";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { Link } from "wouter";
+import { format } from "date-fns";
+import type { Client, Project } from "@shared/schema";
+
+const invoiceFormSchema = z.object({
+  clientId: z.string().min(1, "Client is required"),
+  projectId: z.string().optional(),
+  invoiceNumber: z.string().optional(),
+  issueDate: z.string(),
+  dueDate: z.string(),
+  taxRate: z.number().min(0).max(100),
+  notes: z.string().optional(),
+  lineItems: z.array(
+    z.object({
+      description: z.string().min(1, "Description is required"),
+      quantity: z.number().min(0.01),
+      unitPrice: z.number().min(0),
+    })
+  ).min(1, "At least one line item is required"),
+  status: z.enum(["DRAFT", "SENT"]),
+});
+
+type InvoiceFormData = z.infer<typeof invoiceFormSchema>;
+
+export default function InvoiceCreatePage() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const urlParams = new URLSearchParams(window.location.search);
+  const preSelectedClientId = urlParams.get("clientId");
+
+  const form = useForm<InvoiceFormData>({
+    resolver: zodResolver(invoiceFormSchema),
+    defaultValues: {
+      clientId: preSelectedClientId || "",
+      projectId: "",
+      invoiceNumber: "",
+      issueDate: format(new Date(), "yyyy-MM-dd"),
+      dueDate: format(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
+      taxRate: 18,
+      notes: "",
+      lineItems: [{ description: "", quantity: 1, unitPrice: 0 }],
+      status: "DRAFT",
+    },
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "lineItems",
+  });
+
+  const { data: clients } = useQuery<Client[]>({
+    queryKey: ["/api/clients", { status: "ACTIVE" }],
+  });
+
+  const selectedClientId = form.watch("clientId");
+  const { data: projects } = useQuery<Project[]>({
+    queryKey: ["/api/projects", { clientId: selectedClientId }],
+    enabled: !!selectedClientId,
+  });
+
+  const lineItems = form.watch("lineItems");
+  const taxRate = form.watch("taxRate");
+
+  const subtotal = lineItems.reduce(
+    (sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0),
+    0
+  );
+  const taxAmount = (subtotal * (taxRate || 0)) / 100;
+  const total = subtotal + taxAmount;
+
+  const mutation = useMutation({
+    mutationFn: async (data: InvoiceFormData) => {
+      const payload = {
+        clientId: data.clientId,
+        projectId: data.projectId || null,
+        invoiceNumber: data.invoiceNumber || undefined,
+        issueDate: data.issueDate,
+        dueDate: data.dueDate,
+        currency: "INR",
+        subtotal,
+        taxAmount,
+        totalAmount: total,
+        status: data.status,
+        notes: data.notes || "",
+        lineItems: data.lineItems.map((item) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: item.quantity * item.unitPrice,
+        })),
+      };
+      return apiRequest("POST", "/api/invoices", payload);
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      toast({
+        title: "Invoice created",
+        description: "Successfully created invoice",
+      });
+      setLocation(`/invoices/${data.id}`);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      minimumFractionDigits: 2,
+    }).format(amount);
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center gap-4">
+        <Link href="/invoices">
+          <Button variant="ghost" size="icon" data-testid="button-back">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </Link>
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">Create Invoice</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Generate a new invoice for your client
+          </p>
+        </div>
+      </div>
+
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Invoice Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="clientId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Client *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-client">
+                            <SelectValue placeholder="Select client" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {clients?.map((client) => (
+                            <SelectItem key={client.id} value={client.id}>
+                              {client.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="projectId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Project (Optional)</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        disabled={!selectedClientId}
+                      >
+                        <FormControl>
+                          <SelectTrigger data-testid="select-project">
+                            <SelectValue placeholder="Select project" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">No project</SelectItem>
+                          {projects?.map((project) => (
+                            <SelectItem key={project.id} value={project.id}>
+                              {project.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="invoiceNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Invoice Number (Auto-generated if empty)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="INV-0001" {...field} data-testid="input-invoice-number" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="taxRate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tax Rate (%)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          {...field}
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          data-testid="input-tax-rate"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="issueDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Issue Date *</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} data-testid="input-issue-date" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="dueDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Due Date *</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} data-testid="input-due-date" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notes</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Additional notes or payment terms..."
+                        className="min-h-20"
+                        {...field}
+                        data-testid="input-notes"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Line Items</CardTitle>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => append({ description: "", quantity: 1, unitPrice: 0 })}
+                  data-testid="button-add-line-item"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Item
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="w-32">Quantity</TableHead>
+                    <TableHead className="w-40">Unit Price</TableHead>
+                    <TableHead className="w-40 text-right">Line Total</TableHead>
+                    <TableHead className="w-20"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {fields.map((field, index) => (
+                    <TableRow key={field.id}>
+                      <TableCell>
+                        <FormField
+                          control={form.control}
+                          name={`lineItems.${index}.description`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  placeholder="Service or product description"
+                                  {...field}
+                                  data-testid={`input-description-${index}`}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <FormField
+                          control={form.control}
+                          name={`lineItems.${index}.quantity`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                                  data-testid={`input-quantity-${index}`}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <FormField
+                          control={form.control}
+                          name={`lineItems.${index}.unitPrice`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                                  data-testid={`input-unit-price-${index}`}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </TableCell>
+                      <TableCell className="text-right font-mono" data-testid={`text-line-total-${index}`}>
+                        {formatCurrency(
+                          (lineItems[index]?.quantity || 0) * (lineItems[index]?.unitPrice || 0)
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {fields.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => remove(index)}
+                            data-testid={`button-remove-${index}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              <div className="mt-6 flex justify-end">
+                <div className="w-80 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Subtotal:</span>
+                    <span className="font-mono" data-testid="text-subtotal">{formatCurrency(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Tax ({taxRate}%):</span>
+                    <span className="font-mono" data-testid="text-tax">{formatCurrency(taxAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-lg font-semibold border-t pt-2">
+                    <span>Total:</span>
+                    <span className="font-mono" data-testid="text-total">{formatCurrency(total)}</span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end gap-2">
+            <Link href="/invoices">
+              <Button type="button" variant="outline" data-testid="button-cancel">
+                Cancel
+              </Button>
+            </Link>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                form.setValue("status", "DRAFT");
+                form.handleSubmit((data) => mutation.mutate(data))();
+              }}
+              disabled={mutation.isPending}
+              data-testid="button-save-draft"
+            >
+              Save as Draft
+            </Button>
+            <Button
+              type="submit"
+              onClick={() => form.setValue("status", "SENT")}
+              disabled={mutation.isPending}
+              data-testid="button-mark-sent"
+            >
+              {mutation.isPending ? "Creating..." : "Mark as Sent"}
+            </Button>
+          </div>
+        </form>
+      </Form>
+    </div>
+  );
+}
