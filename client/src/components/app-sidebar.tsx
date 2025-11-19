@@ -5,6 +5,7 @@ import {
   Briefcase,
   CreditCard,
   DollarSign,
+  Settings,
   BookOpen,
   Globe,
   Archive,
@@ -33,6 +34,7 @@ const activeItems = [
   { title: "Vendors", url: "/vendors", icon: Briefcase, testId: "link-vendors" },
   { title: "Expenses", url: "/expenses", icon: CreditCard, testId: "link-expenses" },
   { title: "Team & Salaries", url: "/team-salaries", icon: DollarSign, testId: "link-team-salaries" },
+  { title: "Settings", url: "/settings", icon: Settings, testId: "link-settings" },
 ];
 
 const placeholderItems = [
