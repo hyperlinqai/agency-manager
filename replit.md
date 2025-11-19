@@ -4,7 +4,7 @@
 
 Agency Control Center is an internal web application for digital marketing agencies to manage clients, projects, invoices, and payments. The application follows a spreadsheet-like design philosophy inspired by Google Sheets, Airtable, and Linear, prioritizing data density and efficient workflows over visual flair.
 
-The system is currently in Phase 1, implementing core client management and invoicing features, with placeholders for future expansion including vendor management, expense tracking, salary payments, client portals, and learning resources.
+**Current Status:** Phase 2 complete. The system now includes comprehensive vendor management, expense tracking with categories, team member management, salary payments, and financial overview dashboard showing income vs expenses with profit metrics.
 
 ## User Preferences
 
@@ -60,10 +60,10 @@ Preferred communication style: Simple, everyday language.
 - 401/403 responses trigger automatic logout and redirect to login
 
 **Data Storage:**
-- In-memory storage implementation using TypeScript interfaces
-- Storage abstraction layer (IStorage interface) for easy database migration
-- Designed to be replaced with PostgreSQL using Drizzle ORM
+- PostgreSQL database via Drizzle ORM and Neon serverless
+- Storage implementation in DatabaseStorage class with IStorage interface
 - Schema definitions shared between client and server via `@shared/schema`
+- Automatic database seeding on first run with sample data
 
 **Server-Side Rendering:**
 - Vite integration for development with HMR
@@ -78,12 +78,22 @@ Preferred communication style: Simple, everyday language.
 - **Projects:** Linked to clients, with status workflow (Active/On Hold/Completed/Cancelled)
 - **Invoices:** Line items, tax calculations, automatic numbering, and status management
 - **Payments:** Linked to invoices with automatic status updates
+- **Vendors:** Supplier management with contact details and status tracking
+- **Expense Categories:** Predefined categories for expense organization (e.g., Software, Marketing, Travel)
+- **Expenses:** Business expenses linked to vendors and categories with status tracking (Pending/Approved/Paid)
+- **Team Members:** Employee records with role, salary, and status information
+- **Salary Payments:** Monthly salary payment records linked to team members
 
 **Business Rules:**
 - Invoice status automatically transitions: DRAFT → SENT → PAID/OVERDUE
 - Payment recording automatically updates invoice status to PAID
 - Invoice numbering follows sequential pattern (INV-001, INV-002, etc.)
 - Client statistics include total invoiced, paid, and outstanding amounts
+- Financial dashboard calculates:
+  - Total Income: Sum of all payment amounts collected
+  - Total Expenses: Sum of all business expenses plus all salary payments
+  - Net Profit: Total Income minus Total Expenses
+  - Profit Margin: (Net Profit / Total Income) × 100%
 
 **Validation:**
 - Zod schemas for runtime validation on both client and server
@@ -92,11 +102,12 @@ Preferred communication style: Simple, everyday language.
 
 ### External Dependencies
 
-**Database (Planned):**
-- Drizzle ORM configured for PostgreSQL via `@neondatabase/serverless`
+**Database:**
+- PostgreSQL database hosted on Neon via `@neondatabase/serverless`
+- Drizzle ORM for type-safe database queries and migrations
 - Migration system configured via `drizzle.config.ts`
-- Currently using in-memory storage with identical interface
-- Schema ready for migration in `shared/schema.ts`
+- Automatic database seeding with sample data on first run
+- Schema definitions in `shared/schema.ts` synced with database
 
 **UI Component Libraries:**
 - Radix UI primitives for accessible, unstyled components
