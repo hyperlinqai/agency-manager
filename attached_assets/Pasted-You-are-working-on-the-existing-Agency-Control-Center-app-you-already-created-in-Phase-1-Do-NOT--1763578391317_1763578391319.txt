@@ -1,0 +1,306 @@
+You are working on the existing “Agency Control Center” app you already created in Phase 1.
+
+Do NOT rebuild from scratch. Reuse the current tech stack and structure:
+
+- Frontend: React + TypeScript + Vite + Tailwind
+- Backend: Node.js + Express
+- Database: SQLite with Prisma ORM
+- Auth: existing login system and middleware
+
+======================================
+PHASE 2 – VENDORS, EXPENSES, SALARIES
+======================================
+
+Goal of this phase:
+- Track ALL money going out of the agency:
+  - Vendor bills and payments
+  - General operating expenses
+  - Team salaries
+- Provide a simple profit view: income (invoices) vs expenses.
+
+Keep everything from Phase 1 working as-is.
+
+------------------
+1) PRISMA DATA MODEL
+------------------
+
+Extend schema.prisma with these models:
+
+Vendor
+- id
+- name
+- contactName
+- email
+- phone
+- website
+- address
+- category (e.g. SOFTWARE, FREELANCER, MEDIA_BUY, OTHER)
+- status (ACTIVE, INACTIVE)
+- notes
+- createdAt, updatedAt
+
+ExpenseCategory
+- id
+- name        (e.g. “Software”, “Advertising”, “Office”, “Salaries”, “Travel”)
+- code        (short code, unique, like “SOFT”, “ADV”)
+- createdAt, updatedAt
+
+Expense
+- id
+- vendorId (optional, null for generic expenses not tied to a vendor)
+- categoryId
+- description
+- amount
+- currency (default “INR”)
+- expenseDate
+- dueDate        (optional, if it’s a bill to be paid later)
+- paidDate       (optional)
+- status (PLANNED, DUE, PAID, CANCELLED)
+- paymentMethod (BANK_TRANSFER, UPI, CASH, CARD, OTHER)
+- reference      (invoice number, UTR, etc.)
+- notes
+- createdAt, updatedAt
+
+TeamMember
+- id
+- name
+- email
+- roleTitle       (e.g. “SEO Specialist”, “Media Buyer”)
+- status (ACTIVE, INACTIVE)
+- baseSalary      (monthly amount)
+- joinedDate
+- exitDate        (optional)
+- notes
+- createdAt, updatedAt
+
+SalaryPayment
+- id
+- teamMemberId
+- month          (store as YYYY-MM, string)
+- paymentDate
+- amount
+- currency (default “INR”)
+- status (PAID, PENDING)
+- paymentMethod (BANK_TRANSFER, UPI, CASH, OTHER)
+- reference
+- notes
+- createdAt, updatedAt
+
+Adjust existing models if needed:
+- Optionally add a relation from ExpenseCategory to mark “isSalaryCategory” but that’s not mandatory.
+
+Seed script updates:
+- Create 3–4 ExpenseCategory records (Software, Advertising, Office, Salaries).
+- Create 2–3 Vendors (e.g. Meta Ads, Google Ads, Freelance Designer).
+- Create 2–3 TeamMembers with different roles and baseSalary.
+- Insert some sample Expenses and SalaryPayments for the last 2–3 months.
+
+Run migrations and update the Prisma client.
+
+------------------
+2) BACKEND API – NEW ROUTES
+------------------
+
+Add new Express routes under /api, all protected by existing auth middleware.
+
+Vendors
+- GET /api/vendors
+  - Query params: status, search (by name/email)
+- GET /api/vendors/:id
+- POST /api/vendors
+- PUT /api/vendors/:id
+- PUT /api/vendors/:id/status   (toggle ACTIVE/INACTIVE)
+
+Expense Categories
+- GET /api/expense-categories
+- POST /api/expense-categories
+- PUT /api/expense-categories/:id
+
+Expenses
+- GET /api/expenses
+  - Query params:
+    - fromDate, toDate
+    - vendorId
+    - categoryId
+    - status
+  - Return list with related vendor and category
+- GET /api/expenses/:id
+- POST /api/expenses
+  - Validate amount > 0 and expenseDate required.
+- PUT /api/expenses/:id
+- POST /api/expenses/:id/mark-paid
+  - Body: paymentDate, paymentMethod, reference
+  - Sets status=PAID and paidDate=paymentDate.
+
+Team Members
+- GET /api/team-members
+  - Filters: status
+- GET /api/team-members/:id
+- POST /api/team-members
+- PUT /api/team-members/:id
+- PUT /api/team-members/:id/status
+
+Salary Payments
+- GET /api/salaries
+  - Filters: teamMemberId, month, status
+- GET /api/salaries/:id
+- POST /api/salaries
+  - Create a salary record for a month.
+- PUT /api/salaries/:id
+- POST /api/salaries/:id/mark-paid
+  - Body: paymentDate, paymentMethod, reference
+  - Sets status=PAID.
+
+Financial summary endpoints
+
+Extend the dashboard with expense info:
+
+- GET /api/dashboard/financial
+  - Inputs: optional fromDate, toDate (defaults: current month)
+  - Returns:
+    - totalInvoiced       (sum of Invoice.totalAmount in range)
+    - totalCollected      (sum of Payments.amount in range)
+    - totalExpenses       (sum of Expense.amount with status=PAID in range)
+    - totalSalaries       (sum of SalaryPayment.amount in range)
+    - netProfit           = totalCollected - (totalExpenses + totalSalaries)
+    - breakdownByCategory (array: categoryName, totalAmount)
+    - topVendors          (top 5 vendors by spend)
+
+Reuse existing dashboard summary endpoint or merge them cleanly.
+
+------------------
+3) FRONTEND – NEW SECTIONS AND SCREENS
+------------------
+
+Update sidebar to include:
+
+- Dashboard
+- Clients
+- Invoices
+- Vendors
+- Expenses
+- Team & Salaries
+- (Learning Hub – still placeholder for later phase)
+
+Use the same design language as Phase 1.
+
+Vendors page
+- Table columns:
+  - Vendor Name
+  - Category (text or chips: Software, Freelancer, etc.)
+  - Email
+  - Phone
+  - Status
+  - Total Spend (sum of expenses tied to this vendor)
+- Controls:
+  - Search by name/email
+  - Filter by status and category
+  - “New Vendor” button
+- New/Edit Vendor form:
+  - name, contactName, email, phone, website, address, category, status, notes
+
+Vendor detail page
+- Header with vendor basic info and status toggle.
+- Tabs:
+  - Overview (contact details, notes)
+  - Expenses (table of expenses for that vendor with amount, date, status, reference)
+- “Add Expense for this Vendor” button that presets vendorId in the form.
+
+Expenses page
+- Table columns:
+  - Date
+  - Description
+  - Vendor (or “General” if none)
+  - Category
+  - Amount
+  - Status (Planned, Due, Paid)
+  - Payment Method
+- Filters:
+  - Date range
+  - Vendor
+  - Category
+  - Status
+- Buttons:
+  - “New Expense”
+- New/Edit Expense form:
+  - vendor (optional dropdown)
+  - category
+  - description
+  - amount
+  - expenseDate
+  - dueDate (optional)
+  - paymentMethod
+  - reference
+  - notes
+  - status (PLANNED/DUE/PAID)
+- On expense detail:
+  - If status is not PAID, show a “Mark as Paid” action that calls mark-paid API.
+
+Team & Salaries page
+- Two tabs:
+  1) Team Members
+  2) Salary Payments
+
+Team Members tab:
+- Table columns:
+  - Name
+  - Role Title
+  - Email
+  - Status
+  - Base Salary (monthly)
+  - Joined Date
+- “New Team Member” button with form:
+  - name, email, roleTitle, baseSalary, joinedDate, status, notes
+
+Salary Payments tab:
+- Filters:
+  - Month (dropdown or date picker that behaves like month)
+  - Team member
+  - Status (Paid/Pending)
+- Table columns:
+  - Month (YYYY-MM)
+  - Team Member
+  - Amount
+  - Payment Date
+  - Status
+  - Payment Method
+- Buttons:
+  - “Create Salary Record” – create a salary entry for a member and month (pre-fill amount with their baseSalary but allow editing).
+- On salary row:
+  - If status=PENDING, show “Mark as Paid” action that opens small form for paymentDate, paymentMethod, reference.
+
+Dashboard updates
+- On the main dashboard, add a “Financial Overview” section:
+  - Cards:
+    - Total Collected (selected period)
+    - Total Expenses
+    - Total Salaries
+    - Net Profit
+  - Simple chart or bar view:
+    - Income vs Expenses vs Salaries for the selected month.
+  - Table:
+    - Top 5 expense categories with totals.
+    - Top vendors by spend.
+
+Use a simple dropdown to switch period:
+- This Month
+- Last Month
+- Last 3 Months
+- Custom (optional)
+
+------------------
+4) GENERAL REQUIREMENTS
+------------------
+
+- Keep validation strict on the backend (no negative amounts, required fields).
+- Handle loading and error states properly on the frontend.
+- Ensure existing Phase 1 functionality (clients and invoices) still works.
+- Update README to describe Phase 2 features:
+  - New models
+  - How to create expenses, vendors, and salaries
+  - Example flows for:
+    - Recording a Facebook Ads bill as an expense
+    - Paying a freelancer vendor
+    - Recording monthly salaries and checking net profit.
+
+Now update the existing codebase to implement all Phase 2 features described above.
