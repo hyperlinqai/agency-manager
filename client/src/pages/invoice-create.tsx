@@ -33,10 +33,16 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Package } from "lucide-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
-import type { Client, Project } from "@shared/schema";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import type { Client, Project, Service } from "@shared/schema";
 
 const invoiceFormSchema = z.object({
   clientId: z.string().min(1, "Client is required"),
@@ -61,6 +67,7 @@ type InvoiceFormData = z.infer<typeof invoiceFormSchema>;
 export default function InvoiceCreatePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [servicePopoverOpen, setServicePopoverOpen] = useState(false);
   const urlParams = new URLSearchParams(window.location.search);
   const preSelectedClientId = urlParams.get("clientId");
 
@@ -94,6 +101,16 @@ export default function InvoiceCreatePage() {
     enabled: !!selectedClientId,
   });
 
+  const { data: services } = useQuery<Service[]>({
+    queryKey: ["/api/services"],
+  });
+
+  const activeServices = services?.filter((s) => 
+    s.status === "ACTIVE" && 
+    s.defaultPrice != null && 
+    s.defaultPrice > 0
+  ) || [];
+
   const lineItems = form.watch("lineItems");
   const taxRate = form.watch("taxRate");
 
@@ -103,6 +120,28 @@ export default function InvoiceCreatePage() {
   );
   const taxAmount = (subtotal * (taxRate || 0)) / 100;
   const total = subtotal + taxAmount;
+
+  const handleAddService = (service: Service) => {
+    if (!service.defaultPrice || service.defaultPrice <= 0) {
+      toast({
+        title: "Invalid service",
+        description: "This service does not have a valid default price",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    append({
+      description: `${service.name}${service.description ? ' - ' + service.description : ''}`,
+      quantity: 1,
+      unitPrice: service.defaultPrice,
+    });
+    setServicePopoverOpen(false);
+    toast({
+      title: "Service added",
+      description: `${service.name} has been added to the invoice`,
+    });
+  };
 
   const mutation = useMutation({
     mutationFn: async (data: InvoiceFormData) => {
@@ -316,18 +355,87 @@ export default function InvoiceCreatePage() {
 
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <CardTitle>Line Items</CardTitle>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => append({ description: "", quantity: 1, unitPrice: 0 })}
-                  data-testid="button-add-line-item"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Item
-                </Button>
+                <div className="flex gap-2">
+                  <Popover open={servicePopoverOpen} onOpenChange={setServicePopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        data-testid="button-add-from-service"
+                      >
+                        <Package className="h-4 w-4 mr-2" />
+                        Add from Service
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-0" align="end">
+                      <div className="p-3 border-b">
+                        <h4 className="font-medium text-sm">Select a Service</h4>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Quick add from service catalog
+                        </p>
+                      </div>
+                      <div className="max-h-80 overflow-y-auto">
+                        {activeServices.length > 0 ? (
+                          <div className="p-2">
+                            {activeServices.map((service) => (
+                              <button
+                                key={service.id}
+                                type="button"
+                                onClick={() => handleAddService(service)}
+                                className="w-full text-left p-3 rounded-md hover-elevate active-elevate-2 flex flex-col gap-2"
+                                data-testid={`button-service-${service.id}`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-sm">{service.name}</div>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <Badge variant="outline" className="text-xs">
+                                        {service.category.replace(/_/g, ' ')}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  <div className="text-right flex flex-col items-end gap-0.5">
+                                    <span className="font-mono font-medium text-sm">
+                                      {service.currency} {service.defaultPrice.toLocaleString()}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      per {service.unit}
+                                    </span>
+                                  </div>
+                                </div>
+                                {service.description && (
+                                  <p className="text-xs text-muted-foreground line-clamp-2">
+                                    {service.description}
+                                  </p>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="p-8 text-center">
+                            <p className="text-sm text-muted-foreground">No services available</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Add services in Settings
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => append({ description: "", quantity: 1, unitPrice: 0 })}
+                    data-testid="button-add-line-item"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Item
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>

@@ -4,7 +4,7 @@
 
 Agency Control Center is an internal web application for digital marketing agencies to manage clients, projects, invoices, and payments. The application follows a spreadsheet-like design philosophy inspired by Google Sheets, Airtable, and Linear, prioritizing data density and efficient workflows over visual flair.
 
-**Current Status:** Phase 2 complete. The system now includes comprehensive vendor management, expense tracking with categories, team member management, salary payments, and financial overview dashboard showing income vs expenses with profit metrics.
+**Current Status:** Phase 3 complete. The system now includes a comprehensive service catalog with integration into invoice creation. Users can define reusable service templates (SEO, PPC, Social Media, etc.) with default pricing and descriptions, then quickly add them to invoices via a convenient popover selector. Previous phases include vendor management, expense tracking, team member management, salary payments, and financial dashboard with profit metrics.
 
 ## User Preferences
 
