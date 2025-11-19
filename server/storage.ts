@@ -7,6 +7,7 @@ import {
   invoices,
   invoiceLineItems,
   payments,
+  services,
   vendors,
   expenseCategories,
   expenses,
@@ -18,6 +19,7 @@ import {
   type Invoice,
   type InvoiceLineItem,
   type Payment,
+  type Service,
   type Vendor,
   type ExpenseCategory,
   type Expense,
@@ -26,6 +28,7 @@ import {
   type InsertClient,
   type InsertProject,
   type InsertPayment,
+  type InsertService,
   type InsertVendor,
   type InsertExpenseCategory,
   type InsertExpense,
@@ -96,6 +99,13 @@ export interface IStorage {
   // Payment methods
   getPaymentsByInvoiceId(invoiceId: string): Promise<Payment[]>;
   createPayment(payment: InsertPayment): Promise<Payment>;
+  
+  // Service methods
+  getServices(filters?: { status?: string; category?: string }): Promise<Service[]>;
+  getServiceById(id: string): Promise<Service | undefined>;
+  createService(service: InsertService): Promise<Service>;
+  updateService(id: string, service: Partial<InsertService>): Promise<Service>;
+  updateServiceStatus(id: string, status: string): Promise<Service>;
   
   // Dashboard methods
   getDashboardSummary(): Promise<DashboardSummary>;
@@ -634,6 +644,103 @@ export class DatabaseStorage implements IStorage {
     return {
       ...newPayment,
       amount: toNumber(newPayment.amount),
+    };
+  }
+
+  // Service methods
+  async getServices(filters?: { status?: string; category?: string }): Promise<Service[]> {
+    const conditions = [];
+    
+    if (filters?.status) {
+      conditions.push(eq(services.status, filters.status as any));
+    }
+    
+    if (filters?.category) {
+      conditions.push(eq(services.category, filters.category as any));
+    }
+    
+    const serviceList = await db
+      .select()
+      .from(services)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(services.createdAt));
+    
+    return serviceList.map(service => ({
+      ...service,
+      defaultPrice: toNumber(service.defaultPrice),
+    }));
+  }
+
+  async getServiceById(id: string): Promise<Service | undefined> {
+    const [service] = await db
+      .select()
+      .from(services)
+      .where(eq(services.id, id));
+    
+    if (!service) return undefined;
+    
+    return {
+      ...service,
+      defaultPrice: toNumber(service.defaultPrice),
+    };
+  }
+
+  async createService(service: InsertService): Promise<Service> {
+    const [newService] = await db
+      .insert(services)
+      .values({
+        id: nanoid(),
+        name: service.name,
+        description: service.description || "",
+        category: service.category,
+        defaultPrice: service.defaultPrice.toString(),
+        currency: service.currency || "INR",
+        unit: service.unit || "Hour",
+        status: service.status || "ACTIVE",
+      })
+      .returning();
+    
+    return {
+      ...newService,
+      defaultPrice: toNumber(newService.defaultPrice),
+    };
+  }
+
+  async updateService(id: string, service: Partial<InsertService>): Promise<Service> {
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+    
+    if (service.name !== undefined) updateData.name = service.name;
+    if (service.description !== undefined) updateData.description = service.description;
+    if (service.category !== undefined) updateData.category = service.category;
+    if (service.defaultPrice !== undefined) updateData.defaultPrice = service.defaultPrice.toString();
+    if (service.currency !== undefined) updateData.currency = service.currency;
+    if (service.unit !== undefined) updateData.unit = service.unit;
+    if (service.status !== undefined) updateData.status = service.status;
+    
+    const [updatedService] = await db
+      .update(services)
+      .set(updateData)
+      .where(eq(services.id, id))
+      .returning();
+    
+    return {
+      ...updatedService,
+      defaultPrice: toNumber(updatedService.defaultPrice),
+    };
+  }
+
+  async updateServiceStatus(id: string, status: string): Promise<Service> {
+    const [updatedService] = await db
+      .update(services)
+      .set({ status: status as any, updatedAt: new Date() })
+      .where(eq(services.id, id))
+      .returning();
+    
+    return {
+      ...updatedService,
+      defaultPrice: toNumber(updatedService.defaultPrice),
     };
   }
 

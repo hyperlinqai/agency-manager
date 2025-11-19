@@ -181,6 +181,37 @@ export const insertPaymentSchema = z.object({
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 
 // ============================================
+// SERVICE
+// ============================================
+export const serviceStatuses = ["ACTIVE", "INACTIVE"] as const;
+export const serviceCategories = ["SEO", "SOCIAL_MEDIA", "CONTENT", "ADVERTISING", "DESIGN", "DEVELOPMENT", "CONSULTING", "OTHER"] as const;
+
+export interface Service {
+  id: string;
+  name: string;
+  description: string;
+  category: typeof serviceCategories[number];
+  defaultPrice: number;
+  currency: string;
+  unit: string;
+  status: typeof serviceStatuses[number];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const insertServiceSchema = z.object({
+  name: z.string().min(1, "Service name is required"),
+  description: z.string().optional().default(""),
+  category: z.enum(serviceCategories).default("OTHER"),
+  defaultPrice: z.number().min(0, "Price must be 0 or greater"),
+  currency: z.string().default("INR"),
+  unit: z.string().default("Hour"),
+  status: z.enum(serviceStatuses).default("ACTIVE"),
+});
+
+export type InsertService = z.infer<typeof insertServiceSchema>;
+
+// ============================================
 // DASHBOARD SUMMARY
 // ============================================
 export interface DashboardSummary {
@@ -411,6 +442,8 @@ export const clientStatusEnum = pgEnum("client_status", clientStatuses);
 export const projectStatusEnum = pgEnum("project_status", projectStatuses);
 export const invoiceStatusEnum = pgEnum("invoice_status", invoiceStatuses);
 export const paymentMethodEnum = pgEnum("payment_method", paymentMethods);
+export const serviceStatusEnum = pgEnum("service_status", serviceStatuses);
+export const serviceCategoryEnum = pgEnum("service_category", serviceCategories);
 export const vendorCategoryEnum = pgEnum("vendor_category", vendorCategories);
 export const vendorStatusEnum = pgEnum("vendor_status", vendorStatuses);
 export const expenseStatusEnum = pgEnum("expense_status", expenseStatuses);
@@ -498,6 +531,20 @@ export const payments = pgTable("payments", {
   reference: text("reference").notNull().default(""),
   notes: text("notes").notNull().default(""),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Services table
+export const services = pgTable("services", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description").notNull().default(""),
+  category: serviceCategoryEnum("category").notNull().default("OTHER"),
+  defaultPrice: decimal("default_price", { precision: 12, scale: 2 }).notNull().default("0"),
+  currency: varchar("currency", { length: 10 }).notNull().default("INR"),
+  unit: varchar("unit", { length: 50 }).notNull().default("Hour"),
+  status: serviceStatusEnum("status").notNull().default("ACTIVE"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 // Vendors table
