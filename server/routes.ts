@@ -13,6 +13,7 @@ import {
   insertExpenseSchema,
   insertTeamMemberSchema,
   insertSalaryPaymentSchema,
+  insertCompanyProfileSchema,
 } from "@shared/schema";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "development-secret-key";
@@ -657,6 +658,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reference: reference || "",
       });
       res.json(salary);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  // ============================================
+  // COMPANY PROFILE ROUTES
+  // ============================================
+  app.get("/api/settings/company", authenticateToken, async (req, res) => {
+    try {
+      const profile = await storage.getCompanyProfile();
+      if (!profile) {
+        return res.status(404).send("Company profile not found");
+      }
+      res.json(profile);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/settings/company", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertCompanyProfileSchema.parse(req.body);
+      const profile = await storage.createCompanyProfile(validatedData);
+      res.json(profile);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.put("/api/settings/company/:id", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertCompanyProfileSchema.partial().parse(req.body);
+      const profile = await storage.updateCompanyProfile(req.params.id, validatedData);
+      res.json(profile);
     } catch (error: any) {
       res.status(400).send(error.message);
     }

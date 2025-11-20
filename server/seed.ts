@@ -640,7 +640,35 @@ export async function seedDatabase() {
 
     console.log("Created 6 salary payment records");
 
-    console.log("\n✅ Database seeded successfully with Phase 1 & Phase 2 data!");
+    // ==== Company Profile ====
+    await storage.createCompanyProfile({
+      companyName: "Hyperlinq Technology",
+      addressLine1: "201, Princess Business Skypark",
+      addressLine2: "Opp Orbit Mall, A.B Road",
+      city: "Indore",
+      state: "Madhya Pradesh",
+      postalCode: "452010",
+      country: "India",
+      email: "contact@hyperlinq.tech",
+      phone: "+91 98765 43210",
+      taxId: "GST1234567890",
+      bankName: "HDFC Bank",
+      bankAccountNumber: "50200012345678",
+      bankIfscCode: "HDFC0001234",
+      paymentGatewayDetails: "Using Payment Gateways like Stripe/Razorpay will cost you additional levy of 5% platform usage charges.",
+      invoiceTerms: `1. Payment for the invoice is due 02 days from the date of the invoice.
+2. In the event of late payment, a late fee of 2% may be charged on the outstanding balance for each month the payment is overdue.
+3. We accept payments via bank transfer. Please ensure that the payment is made using the provided details on the invoice.
+4. Any disputes regarding this invoice must be communicated to us in writing within 15 days of receiving the invoice.
+5. Using Payment Gateways like Stripe/Razorpay will cost you additional levy of 5% platform usage charges.`,
+      paymentNotes: "Thanks for your business.",
+      authorizedSignatoryName: "Mohammed Shoaib Khan",
+      authorizedSignatoryTitle: "Proprietor",
+    });
+
+    console.log("Created company profile");
+
+    console.log("\n✅ Database seeded successfully with all data!");
     console.log("\nLogin credentials:");
     console.log("Email: admin@agency.local");
     console.log("Password: admin123");

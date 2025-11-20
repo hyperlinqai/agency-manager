@@ -156,6 +156,11 @@ export interface IStorage {
   
   // Financial Dashboard
   getFinancialSummary(filters?: { fromDate?: string; toDate?: string }): Promise<FinancialSummary>;
+  
+  // Company Profile methods
+  getCompanyProfile(): Promise<CompanyProfile | undefined>;
+  createCompanyProfile(profile: InsertCompanyProfile): Promise<CompanyProfile>;
+  updateCompanyProfile(id: string, profile: Partial<InsertCompanyProfile>): Promise<CompanyProfile>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1461,6 +1466,35 @@ export class DatabaseStorage implements IStorage {
       breakdownByCategory: breakdownByCategory.filter((cat) => cat.totalAmount > 0),
       topVendors,
     };
+  }
+
+  // Company Profile methods
+  async getCompanyProfile(): Promise<CompanyProfile | undefined> {
+    const [profile] = await db.select().from(companyProfiles).limit(1);
+    return profile || undefined;
+  }
+
+  async createCompanyProfile(profile: InsertCompanyProfile): Promise<CompanyProfile> {
+    const [newProfile] = await db
+      .insert(companyProfiles)
+      .values({
+        id: nanoid(),
+        ...profile,
+      })
+      .returning();
+    return newProfile;
+  }
+
+  async updateCompanyProfile(id: string, profile: Partial<InsertCompanyProfile>): Promise<CompanyProfile> {
+    const [updated] = await db
+      .update(companyProfiles)
+      .set({
+        ...profile,
+        updatedAt: new Date(),
+      })
+      .where(eq(companyProfiles.id, id))
+      .returning();
+    return updated;
   }
 }
 
