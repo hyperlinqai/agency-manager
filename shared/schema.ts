@@ -689,9 +689,68 @@ export const teamMembersRelations = relations(teamMembers, ({ many }) => ({
   salaryPayments: many(salaryPayments),
 }));
 
-export const salaryPaymentsRelations = relations(salaryPayments, ({ one }) => ({
+export const salaryPaymentsRelations = relations(salaryPayments, ({ one}) => ({
   teamMember: one(teamMembers, {
     fields: [salaryPayments.teamMemberId],
     references: [teamMembers.id],
   }),
 }));
+
+// ============================================
+// COMPANY PROFILE
+// ============================================
+export const companyProfiles = pgTable("company_profiles", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  companyName: varchar("company_name", { length: 255 }).notNull(),
+  addressLine1: text("address_line1").notNull().default(""),
+  addressLine2: text("address_line2").notNull().default(""),
+  city: varchar("city", { length: 100 }).notNull().default(""),
+  state: varchar("state", { length: 100 }).notNull().default(""),
+  postalCode: varchar("postal_code", { length: 20 }).notNull().default(""),
+  country: varchar("country", { length: 100 }).notNull().default("India"),
+  email: varchar("email", { length: 255 }).notNull().default(""),
+  phone: varchar("phone", { length: 50 }).notNull().default(""),
+  taxId: varchar("tax_id", { length: 50 }).notNull().default(""),
+  bankName: varchar("bank_name", { length: 255 }).notNull().default(""),
+  bankAccountNumber: varchar("bank_account_number", { length: 100 }).notNull().default(""),
+  bankIfscCode: varchar("bank_ifsc_code", { length: 50 }).notNull().default(""),
+  paymentGatewayDetails: text("payment_gateway_details").notNull().default(""),
+  invoiceTerms: text("invoice_terms").notNull().default(""),
+  paymentNotes: text("payment_notes").notNull().default(""),
+  authorizedSignatoryName: varchar("authorized_signatory_name", { length: 255 }).notNull().default(""),
+  authorizedSignatoryTitle: varchar("authorized_signatory_title", { length: 100 }).notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export interface CompanyProfile {
+  id: string;
+  companyName: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  email: string;
+  phone: string;
+  taxId: string;
+  bankName: string;
+  bankAccountNumber: string;
+  bankIfscCode: string;
+  paymentGatewayDetails: string;
+  invoiceTerms: string;
+  paymentNotes: string;
+  authorizedSignatoryName: string;
+  authorizedSignatoryTitle: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const insertCompanyProfileSchema = createInsertSchema(companyProfiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertCompanyProfile = z.infer<typeof insertCompanyProfileSchema>;
