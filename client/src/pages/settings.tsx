@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -16,12 +16,28 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Building2, Save } from "lucide-react";
 import { ServiceDialog } from "@/components/service-dialog";
 import { Badge } from "@/components/ui/badge";
-import type { Service } from "@shared/schema";
+import type { Service, CompanyProfile } from "@shared/schema";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { insertCompanyProfileSchema } from "@shared/schema";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { z } from "zod";
 
 export default function SettingsPage() {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -72,6 +88,7 @@ export default function SettingsPage() {
       <Tabs defaultValue="services" className="w-full">
         <TabsList>
           <TabsTrigger value="services" data-testid="tab-services">Services</TabsTrigger>
+          <TabsTrigger value="company" data-testid="tab-company">Company Info</TabsTrigger>
         </TabsList>
 
         <TabsContent value="services" className="space-y-4 mt-6">
@@ -165,6 +182,10 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="company" className="space-y-4 mt-6">
+          <CompanySettingsForm />
+        </TabsContent>
       </Tabs>
 
       <ServiceDialog
@@ -173,5 +194,404 @@ export default function SettingsPage() {
         onClose={handleCloseDialog}
       />
     </div>
+  );
+}
+
+function CompanySettingsForm() {
+  const { toast } = useToast();
+  const { data: companyProfile, isLoading } = useQuery<CompanyProfile>({
+    queryKey: ["/api/settings/company"],
+  });
+
+  const form = useForm<z.infer<typeof insertCompanyProfileSchema>>({
+    resolver: zodResolver(insertCompanyProfileSchema),
+    defaultValues: {
+      companyName: "",
+      addressLine1: "",
+      addressLine2: "",
+      city: "",
+      state: "",
+      postalCode: "",
+      country: "",
+      email: "",
+      phone: "",
+      taxId: "",
+      bankName: "",
+      bankAccountNumber: "",
+      bankIfscCode: "",
+      paymentGatewayDetails: "",
+      invoiceTerms: "",
+      paymentNotes: "",
+      authorizedSignatoryName: "",
+      authorizedSignatoryTitle: "",
+    },
+    values: companyProfile || undefined,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof insertCompanyProfileSchema>) => {
+      if (!companyProfile?.id) {
+        return await apiRequest("/api/settings/company", "POST", data);
+      }
+      return await apiRequest(`/api/settings/company/${companyProfile.id}`, "PUT", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/company"] });
+      toast({
+        title: "Success",
+        description: "Company profile updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = (data: z.infer<typeof insertCompanyProfileSchema>) => {
+    updateMutation.mutate(data);
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Company Information</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-primary" />
+              <CardTitle>Company Information</CardTitle>
+            </div>
+            <CardDescription>
+              Update your company details for invoices and official documents
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="companyName"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Company Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Acme Corporation" data-testid="input-company-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="email" placeholder="contact@company.com" data-testid="input-email" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="+1 234 567 8900" data-testid="input-phone" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="addressLine1"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Address Line 1</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="123 Main Street" data-testid="input-address-1" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="addressLine2"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Address Line 2</FormLabel>
+                    <FormControl>
+                      <Input {...field} value={field.value || ""} placeholder="Suite 100" data-testid="input-address-2" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="city"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>City</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="New York" data-testid="input-city" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="state"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>State/Province</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="NY" data-testid="input-state" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="postalCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Postal Code</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="10001" data-testid="input-postal" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="country"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Country</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="United States" data-testid="input-country" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="taxId"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Tax ID / GST Number</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="GST1234567890" data-testid="input-tax-id" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Banking Details</CardTitle>
+            <CardDescription>Bank account information for invoice payments</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="bankName"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Bank Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="HDFC Bank" data-testid="input-bank-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="bankAccountNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Account Number</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="50200012345678" data-testid="input-account-number" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="bankIfscCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>IFSC / Swift Code</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="HDFC0001234" data-testid="input-ifsc" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="paymentGatewayDetails"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Payment Gateway Details</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        value={field.value || ""}
+                        placeholder="Optional payment gateway information or fees"
+                        data-testid="input-gateway-details"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Invoice Settings</CardTitle>
+            <CardDescription>Default terms and notes for invoices</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <FormField
+              control={form.control}
+              name="invoiceTerms"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Invoice Terms & Conditions</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      value={field.value || ""}
+                      placeholder="Payment terms, late fees, etc."
+                      rows={6}
+                      data-testid="input-invoice-terms"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="paymentNotes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Payment Notes</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      value={field.value || ""}
+                      placeholder="Thank you notes or additional payment instructions"
+                      rows={3}
+                      data-testid="input-payment-notes"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Authorized Signatory</CardTitle>
+            <CardDescription>Person authorized to sign invoices and documents</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="authorizedSignatoryName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="John Doe" data-testid="input-signatory-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="authorizedSignatoryTitle"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Title</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Proprietor" data-testid="input-signatory-title" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex justify-end">
+          <Button type="submit" disabled={updateMutation.isPending} data-testid="button-save-company">
+            <Save className="h-4 w-4 mr-2" />
+            {updateMutation.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
+      </form>
+    </Form>
   );
 }
