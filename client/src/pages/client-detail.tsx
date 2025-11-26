@@ -45,6 +45,7 @@ export default function ClientDetailPage() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deletingProject, setDeletingProject] = useState<Project | null>(null);
+  const [deletingInvoice, setDeletingInvoice] = useState<InvoiceWithRelations | null>(null);
   const { toast } = useToast();
 
   const { data: client, isLoading: clientLoading } = useQuery<Client>({
@@ -118,6 +119,27 @@ export default function ClientDetailPage() {
         description: "Project has been deleted successfully",
       });
       setDeletingProject(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteInvoiceMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      return apiRequest("DELETE", `/api/invoices/${invoiceId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      toast({
+        title: "Invoice deleted",
+        description: "Invoice has been deleted successfully",
+      });
+      setDeletingInvoice(null);
     },
     onError: (error: Error) => {
       toast({
@@ -417,17 +439,21 @@ export default function ClientDetailPage() {
                       <TableHead className="text-right text-xs uppercase tracking-wider">Paid</TableHead>
                       <TableHead className="text-right text-xs uppercase tracking-wider">Balance</TableHead>
                       <TableHead className="text-xs uppercase tracking-wider">Status</TableHead>
+                      <TableHead className="text-right text-xs uppercase tracking-wider">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {invoices.map((invoice) => (
                       <TableRow 
                         key={invoice.id} 
-                        className="hover:bg-muted/30 cursor-pointer"
-                        onClick={() => navigate(`/invoices/${invoice.id}`)}
+                        className="hover:bg-muted/30"
                         data-testid={`row-invoice-${invoice.id}`}
                       >
-                        <TableCell className="font-mono text-sm font-medium text-primary" data-testid={`text-invoice-number-${invoice.id}`}>
+                        <TableCell 
+                          className="font-mono text-sm font-medium text-primary cursor-pointer hover:underline" 
+                          onClick={() => navigate(`/invoices/${invoice.id}`)}
+                          data-testid={`text-invoice-number-${invoice.id}`}
+                        >
                           {invoice.invoiceNumber}
                         </TableCell>
                         <TableCell className="text-muted-foreground" data-testid={`text-project-${invoice.id}`}>
@@ -450,6 +476,28 @@ export default function ClientDetailPage() {
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={invoice.status} type="invoice" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.id}`)}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => setDeletingInvoice(invoice)}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -487,6 +535,15 @@ export default function ClientDetailPage() {
         title="Delete Project"
         itemName={deletingProject?.name}
         isLoading={deleteProjectMutation.isPending}
+      />
+      <DeleteConfirmDialog
+        open={!!deletingInvoice}
+        onOpenChange={(open) => !open && setDeletingInvoice(null)}
+        onConfirm={() => deletingInvoice && deleteInvoiceMutation.mutate(deletingInvoice.id)}
+        title="Delete Invoice"
+        itemName={deletingInvoice?.invoiceNumber}
+        description={`Are you sure you want to delete invoice "${deletingInvoice?.invoiceNumber}"? This will also delete all associated payments and line items. This action cannot be undone.`}
+        isLoading={deleteInvoiceMutation.isPending}
       />
     </div>
   );
