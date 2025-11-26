@@ -33,11 +33,11 @@ export default function TeamSalariesPage() {
   const [salaryStatusFilter, setSalaryStatusFilter] = useState("");
 
   const { data: teamMembers = [], isLoading: loadingTeam } = useQuery<TeamMember[]>({
-    queryKey: ["/api/team-members", { status: statusFilter }],
+    queryKey: ["/api/team-members", { status: statusFilter === "all" ? undefined : statusFilter }],
   });
 
   const { data: salaries = [], isLoading: loadingSalaries } = useQuery<SalaryPayment[]>({
-    queryKey: ["/api/salaries", { status: salaryStatusFilter }],
+    queryKey: ["/api/salaries", { status: salaryStatusFilter === "all" ? undefined : salaryStatusFilter }],
   });
 
   const deleteMemberMutation = useMutation({

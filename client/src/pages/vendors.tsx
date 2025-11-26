@@ -27,7 +27,11 @@ export default function VendorsPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
 
   const { data: vendors = [], isLoading } = useQuery<Vendor[]>({
-    queryKey: ["/api/vendors", { status: statusFilter, search: searchQuery, category: categoryFilter }],
+    queryKey: ["/api/vendors", { 
+      status: statusFilter || undefined, 
+      search: searchQuery || undefined, 
+      category: categoryFilter || undefined 
+    }],
   });
 
   const updateStatusMutation = useMutation({

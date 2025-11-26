@@ -30,7 +30,11 @@ export default function ExpensesPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
 
   const { data: expenses = [], isLoading } = useQuery<Expense[]>({
-    queryKey: ["/api/expenses", { status: statusFilter, vendorId: vendorFilter, categoryId: categoryFilter }],
+    queryKey: ["/api/expenses", { 
+      status: statusFilter || undefined, 
+      vendorId: vendorFilter || undefined, 
+      categoryId: categoryFilter || undefined 
+    }],
   });
 
   const { data: vendors = [] } = useQuery<Vendor[]>({
