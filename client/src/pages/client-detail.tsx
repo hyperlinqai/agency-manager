@@ -21,10 +21,16 @@ import {
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Edit, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Edit, Plus, Trash2, MoreHorizontal } from "lucide-react";
 import { ClientDialog } from "@/components/client-dialog";
 import { ProjectDialog } from "@/components/project-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { Client, Project, InvoiceWithRelations } from "@shared/schema";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -36,7 +42,9 @@ export default function ClientDetailPage() {
   const clientId = params?.id;
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deletingProject, setDeletingProject] = useState<Project | null>(null);
   const { toast } = useToast();
 
   const { data: client, isLoading: clientLoading } = useQuery<Client>({
@@ -99,6 +107,37 @@ export default function ClientDetailPage() {
     },
   });
 
+  const deleteProjectMutation = useMutation({
+    mutationFn: async (projectId: string) => {
+      return apiRequest("DELETE", `/api/projects/${projectId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({
+        title: "Project deleted",
+        description: "Project has been deleted successfully",
+      });
+      setDeletingProject(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleEditProject = (project: Project) => {
+    setEditingProject(project);
+    setIsProjectDialogOpen(true);
+  };
+
+  const handleCloseProjectDialog = () => {
+    setIsProjectDialogOpen(false);
+    setEditingProject(null);
+  };
+
   if (clientLoading) {
     return (
       <div className="p-6 space-y-6">
@@ -122,7 +161,7 @@ export default function ClientDetailPage() {
     invoices?.reduce((sum, inv) => sum + inv.balanceDue, 0) || 0;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/clients">
@@ -131,7 +170,7 @@ export default function ClientDetailPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-semibold text-foreground" data-testid="text-client-name">
+            <h1 className="text-2xl font-bold tracking-tight" data-testid="text-client-name">
               {client.name}
             </h1>
             <p className="text-sm text-muted-foreground mt-1">Client Details</p>
@@ -161,7 +200,7 @@ export default function ClientDetailPage() {
           </Button>
           <Button
             variant="outline"
-            className="text-destructive hover:text-destructive"
+            className="text-destructive hover:text-destructive hover:bg-destructive/10"
             onClick={() => setIsDeleteDialogOpen(true)}
             data-testid="button-delete-client"
           >
@@ -172,54 +211,68 @@ export default function ClientDetailPage() {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
+        <TabsList className="bg-muted/50">
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
-          <TabsTrigger value="projects" data-testid="tab-projects">Projects</TabsTrigger>
-          <TabsTrigger value="invoices" data-testid="tab-invoices">Invoices</TabsTrigger>
+          <TabsTrigger value="projects" data-testid="tab-projects">
+            Projects
+            {projects && projects.length > 0 && (
+              <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-primary/10 text-primary">
+                {projects.length}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="invoices" data-testid="tab-invoices">
+            Invoices
+            {invoices && invoices.length > 0 && (
+              <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-primary/10 text-primary">
+                {invoices.length}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Total Invoiced</CardTitle>
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Invoiced</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-semibold font-mono" data-testid="metric-total-invoiced">
+                <div className="text-2xl font-bold font-mono" data-testid="metric-total-invoiced">
                   {formatCurrency(totalInvoiced)}
                 </div>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Outstanding</CardTitle>
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Outstanding</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-semibold font-mono" data-testid="metric-outstanding">
+                <div className="text-2xl font-bold font-mono text-amber-600" data-testid="metric-outstanding">
                   {formatCurrency(totalOutstanding)}
                 </div>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Projects</CardTitle>
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Projects</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-semibold" data-testid="metric-projects">
+                <div className="text-2xl font-bold" data-testid="metric-projects">
                   {projects?.length || 0}
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          <Card>
+          <Card className="border-0 shadow-sm">
             <CardHeader>
-              <CardTitle>Contact Information</CardTitle>
+              <CardTitle className="text-base font-semibold">Contact Information</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1">Contact Person</p>
-                <p className="text-sm" data-testid="text-contact-name">{client.contactName}</p>
+                <p className="text-sm font-medium" data-testid="text-contact-name">{client.contactName}</p>
               </div>
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1">Email</p>
@@ -255,7 +308,7 @@ export default function ClientDetailPage() {
             </Button>
           </div>
 
-          <Card>
+          <Card className="border-0 shadow-sm">
             <CardContent className="p-0">
               {projectsLoading ? (
                 <div className="p-4 space-y-3">
@@ -266,25 +319,29 @@ export default function ClientDetailPage() {
               ) : !projects || projects.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <p>No projects yet</p>
+                  <p className="text-sm mt-1">Create your first project to get started</p>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Project Name</TableHead>
-                      <TableHead>Scope</TableHead>
-                      <TableHead>Start Date</TableHead>
-                      <TableHead>End Date</TableHead>
-                      <TableHead>Status</TableHead>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="text-xs uppercase tracking-wider">Project Name</TableHead>
+                      <TableHead className="text-xs uppercase tracking-wider">Scope</TableHead>
+                      <TableHead className="text-xs uppercase tracking-wider">Start Date</TableHead>
+                      <TableHead className="text-xs uppercase tracking-wider">End Date</TableHead>
+                      <TableHead className="text-xs uppercase tracking-wider">Status</TableHead>
+                      <TableHead className="text-xs uppercase tracking-wider text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {projects.map((project) => (
-                      <TableRow key={project.id} data-testid={`row-project-${project.id}`}>
+                      <TableRow key={project.id} className="hover:bg-muted/30" data-testid={`row-project-${project.id}`}>
                         <TableCell className="font-medium" data-testid={`text-project-name-${project.id}`}>
                           {project.name}
                         </TableCell>
-                        <TableCell data-testid={`text-scope-${project.id}`}>{project.scope}</TableCell>
+                        <TableCell className="text-muted-foreground" data-testid={`text-scope-${project.id}`}>
+                          {project.scope}
+                        </TableCell>
                         <TableCell data-testid={`text-start-${project.id}`}>
                           {formatDate(project.startDate)}
                         </TableCell>
@@ -293,6 +350,28 @@ export default function ClientDetailPage() {
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={project.status} type="project" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleEditProject(project)}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => setDeletingProject(project)}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -313,7 +392,7 @@ export default function ClientDetailPage() {
             </Link>
           </div>
 
-          <Card>
+          <Card className="border-0 shadow-sm">
             <CardContent className="p-0">
               {invoicesLoading ? (
                 <div className="p-4 space-y-3">
@@ -324,28 +403,34 @@ export default function ClientDetailPage() {
               ) : !invoices || invoices.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <p>No invoices yet</p>
+                  <p className="text-sm mt-1">Create your first invoice to get started</p>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice #</TableHead>
-                      <TableHead>Project</TableHead>
-                      <TableHead>Issue Date</TableHead>
-                      <TableHead>Due Date</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                      <TableHead className="text-right">Paid</TableHead>
-                      <TableHead className="text-right">Balance</TableHead>
-                      <TableHead>Status</TableHead>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="text-xs uppercase tracking-wider">Invoice #</TableHead>
+                      <TableHead className="text-xs uppercase tracking-wider">Project</TableHead>
+                      <TableHead className="text-xs uppercase tracking-wider">Issue Date</TableHead>
+                      <TableHead className="text-xs uppercase tracking-wider">Due Date</TableHead>
+                      <TableHead className="text-right text-xs uppercase tracking-wider">Total</TableHead>
+                      <TableHead className="text-right text-xs uppercase tracking-wider">Paid</TableHead>
+                      <TableHead className="text-right text-xs uppercase tracking-wider">Balance</TableHead>
+                      <TableHead className="text-xs uppercase tracking-wider">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {invoices.map((invoice) => (
-                      <TableRow key={invoice.id} data-testid={`row-invoice-${invoice.id}`}>
-                        <TableCell className="font-mono text-sm" data-testid={`text-invoice-number-${invoice.id}`}>
+                      <TableRow 
+                        key={invoice.id} 
+                        className="hover:bg-muted/30 cursor-pointer"
+                        onClick={() => navigate(`/invoices/${invoice.id}`)}
+                        data-testid={`row-invoice-${invoice.id}`}
+                      >
+                        <TableCell className="font-mono text-sm font-medium text-primary" data-testid={`text-invoice-number-${invoice.id}`}>
                           {invoice.invoiceNumber}
                         </TableCell>
-                        <TableCell data-testid={`text-project-${invoice.id}`}>
+                        <TableCell className="text-muted-foreground" data-testid={`text-project-${invoice.id}`}>
                           {invoice.projectName || "—"}
                         </TableCell>
                         <TableCell data-testid={`text-issue-${invoice.id}`}>
@@ -354,13 +439,13 @@ export default function ClientDetailPage() {
                         <TableCell data-testid={`text-due-${invoice.id}`}>
                           {formatDate(invoice.dueDate)}
                         </TableCell>
-                        <TableCell className="text-right font-mono" data-testid={`text-total-${invoice.id}`}>
+                        <TableCell className="text-right font-mono text-sm" data-testid={`text-total-${invoice.id}`}>
                           {formatCurrency(invoice.totalAmount)}
                         </TableCell>
-                        <TableCell className="text-right font-mono" data-testid={`text-paid-${invoice.id}`}>
+                        <TableCell className="text-right font-mono text-sm text-green-600" data-testid={`text-paid-${invoice.id}`}>
                           {formatCurrency(invoice.amountPaid)}
                         </TableCell>
-                        <TableCell className="text-right font-mono" data-testid={`text-balance-${invoice.id}`}>
+                        <TableCell className="text-right font-mono text-sm font-medium" data-testid={`text-balance-${invoice.id}`}>
                           {formatCurrency(invoice.balanceDue)}
                         </TableCell>
                         <TableCell>
@@ -383,8 +468,9 @@ export default function ClientDetailPage() {
       />
       <ProjectDialog
         open={isProjectDialogOpen}
-        onOpenChange={setIsProjectDialogOpen}
+        onOpenChange={handleCloseProjectDialog}
         clientId={clientId!}
+        project={editingProject}
       />
       <DeleteConfirmDialog
         open={isDeleteDialogOpen}
@@ -393,6 +479,14 @@ export default function ClientDetailPage() {
         title="Delete Client"
         itemName={client.name}
         isLoading={deleteMutation.isPending}
+      />
+      <DeleteConfirmDialog
+        open={!!deletingProject}
+        onOpenChange={(open) => !open && setDeletingProject(null)}
+        onConfirm={() => deletingProject && deleteProjectMutation.mutate(deletingProject.id)}
+        title="Delete Project"
+        itemName={deletingProject?.name}
+        isLoading={deleteProjectMutation.isPending}
       />
     </div>
   );

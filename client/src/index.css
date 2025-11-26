@@ -242,15 +242,6 @@
     @apply relative overflow-hidden rounded-xl border bg-card p-6 shadow-sm transition-all duration-200 hover:shadow-md;
   }
   
-  .metric-card::before {
-    content: '';
-    @apply absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 transition-opacity duration-200;
-  }
-  
-  .metric-card:hover::before {
-    @apply opacity-100;
-  }
-  
   /* Status indicator */
   .status-dot {
     @apply w-2 h-2 rounded-full animate-pulse;

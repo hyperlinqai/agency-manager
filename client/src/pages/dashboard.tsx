@@ -47,7 +47,7 @@ export default function DashboardPage() {
     loading,
     trend,
     trendValue,
-    gradient,
+    iconColor,
   }: {
     title: string;
     value: string;
@@ -55,20 +55,23 @@ export default function DashboardPage() {
     loading: boolean;
     trend?: "up" | "down" | "neutral";
     trendValue?: string;
-    gradient?: string;
+    iconColor?: string;
   }) => (
-    <Card className="relative overflow-hidden border-0 shadow-sm hover:shadow-md transition-all duration-200 group">
-      <div className={cn(
-        "absolute inset-0 opacity-5 group-hover:opacity-10 transition-opacity",
-        gradient || "bg-gradient-to-br from-primary to-primary"
-      )} />
+    <Card className="border-0 shadow-sm hover:shadow-md transition-all duration-200">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
         <div className={cn(
           "h-9 w-9 rounded-xl flex items-center justify-center",
-          gradient || "bg-primary/10"
+          iconColor || "bg-primary/10"
         )}>
-          <Icon className="h-4 w-4 text-primary" />
+          <Icon className={cn(
+            "h-4 w-4",
+            iconColor?.includes("green") ? "text-green-600" :
+            iconColor?.includes("blue") ? "text-blue-600" :
+            iconColor?.includes("amber") ? "text-amber-600" :
+            iconColor?.includes("purple") ? "text-purple-600" :
+            "text-primary"
+          )} />
         </div>
       </CardHeader>
       <CardContent>
@@ -111,22 +114,44 @@ export default function DashboardPage() {
     color: "green" | "red" | "blue" | "amber";
   }) => {
     const colorClasses = {
-      green: "bg-green-50 dark:bg-green-950/30 text-green-600 border-green-200 dark:border-green-900",
-      red: "bg-red-50 dark:bg-red-950/30 text-red-600 border-red-200 dark:border-red-900",
-      blue: "bg-blue-50 dark:bg-blue-950/30 text-blue-600 border-blue-200 dark:border-blue-900",
-      amber: "bg-amber-50 dark:bg-amber-950/30 text-amber-600 border-amber-200 dark:border-amber-900",
+      green: {
+        bg: "bg-green-50 dark:bg-green-950/50",
+        border: "border-green-200 dark:border-green-900",
+        icon: "text-green-600",
+        text: "text-green-700 dark:text-green-400",
+      },
+      red: {
+        bg: "bg-red-50 dark:bg-red-950/50",
+        border: "border-red-200 dark:border-red-900",
+        icon: "text-red-600",
+        text: "text-red-700 dark:text-red-400",
+      },
+      blue: {
+        bg: "bg-blue-50 dark:bg-blue-950/50",
+        border: "border-blue-200 dark:border-blue-900",
+        icon: "text-blue-600",
+        text: "text-blue-700 dark:text-blue-400",
+      },
+      amber: {
+        bg: "bg-amber-50 dark:bg-amber-950/50",
+        border: "border-amber-200 dark:border-amber-900",
+        icon: "text-amber-600",
+        text: "text-amber-700 dark:text-amber-400",
+      },
     };
 
+    const classes = colorClasses[color];
+
     return (
-      <div className={cn("rounded-xl border p-5 transition-all hover:shadow-sm", colorClasses[color])}>
-        <div className="flex items-center gap-2 mb-3">
-          <Icon className="h-4 w-4" />
+      <div className={cn("rounded-xl border p-5 transition-all hover:shadow-sm", classes.bg, classes.border)}>
+        <div className="flex items-center gap-2 mb-3 text-muted-foreground">
+          <Icon className={cn("h-4 w-4", classes.icon)} />
           <span className="text-sm font-medium">{title}</span>
         </div>
-        <div className={cn("text-2xl font-bold font-mono", `text-${color}-600`)}>
+        <div className={cn("text-2xl font-bold font-mono", classes.text)}>
           {value}
         </div>
-        <p className="text-xs mt-1 opacity-70">{subtitle}</p>
+        <p className="text-xs mt-1 text-muted-foreground">{subtitle}</p>
       </div>
     );
   };
@@ -159,7 +184,7 @@ export default function DashboardPage() {
           value={formatCurrency(summary?.totalInvoiced || 0)}
           icon={DollarSign}
           loading={summaryLoading}
-          gradient="bg-gradient-to-br from-green-500 to-emerald-600"
+          iconColor="bg-green-100 dark:bg-green-950"
           trend="up"
           trendValue="All time"
         />
@@ -168,21 +193,21 @@ export default function DashboardPage() {
           value={formatCurrency(summary?.totalPaid || 0)}
           icon={TrendingUp}
           loading={summaryLoading}
-          gradient="bg-gradient-to-br from-blue-500 to-cyan-600"
+          iconColor="bg-blue-100 dark:bg-blue-950"
         />
         <MetricCard
           title="Outstanding"
           value={formatCurrency(summary?.totalOutstanding || 0)}
           icon={AlertCircle}
           loading={summaryLoading}
-          gradient="bg-gradient-to-br from-amber-500 to-orange-600"
+          iconColor="bg-amber-100 dark:bg-amber-950"
         />
         <MetricCard
           title="Active Clients"
           value={summary?.countActiveClients?.toString() || "0"}
           icon={Users}
           loading={summaryLoading}
-          gradient="bg-gradient-to-br from-purple-500 to-pink-600"
+          iconColor="bg-purple-100 dark:bg-purple-950"
         />
       </div>
 
