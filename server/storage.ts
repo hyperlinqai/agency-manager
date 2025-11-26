@@ -1594,6 +1594,7 @@ export class DatabaseStorage implements IStorage {
 
   async deleteClient(id: string): Promise<void> {
     const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
     // Check for related projects
     const projectCount = await db.collection("projects").countDocuments({ clientId: id });
     if (projectCount > 0) {
@@ -1604,86 +1605,115 @@ export class DatabaseStorage implements IStorage {
     if (invoiceCount > 0) {
       throw new Error("Cannot delete client with existing invoices. Delete invoices first.");
     }
+    console.log(`Deleting client with id: ${id}`);
     const result = await db.collection("clients").deleteOne({ id });
+    console.log(`Delete result:`, result);
     if (result.deletedCount === 0) throw new Error("Client not found");
   }
 
   async deleteProject(id: string): Promise<void> {
     const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
     // Check for related invoices
     const invoiceCount = await db.collection("invoices").countDocuments({ projectId: id });
     if (invoiceCount > 0) {
       throw new Error("Cannot delete project with existing invoices. Delete invoices first.");
     }
+    console.log(`Deleting project with id: ${id}`);
     const result = await db.collection("projects").deleteOne({ id });
+    console.log(`Delete result:`, result);
     if (result.deletedCount === 0) throw new Error("Project not found");
   }
 
   async deleteInvoice(id: string): Promise<void> {
     const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
     // Delete related line items
     await db.collection("invoiceLineItems").deleteMany({ invoiceId: id });
     // Delete related payments
     await db.collection("payments").deleteMany({ invoiceId: id });
     // Delete the invoice
+    console.log(`Deleting invoice with id: ${id}`);
     const result = await db.collection("invoices").deleteOne({ id });
+    console.log(`Delete result:`, result);
     if (result.deletedCount === 0) throw new Error("Invoice not found");
   }
 
   async deleteService(id: string): Promise<void> {
     const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
+    console.log(`Deleting service with id: ${id}`);
     const result = await db.collection("services").deleteOne({ id });
+    console.log(`Delete result:`, result);
     if (result.deletedCount === 0) throw new Error("Service not found");
   }
 
   async deleteVendor(id: string): Promise<void> {
     const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
     // Check for related expenses
     const expenseCount = await db.collection("expenses").countDocuments({ vendorId: id });
     if (expenseCount > 0) {
       throw new Error("Cannot delete vendor with existing expenses. Delete expenses first or remove vendor from expenses.");
     }
+    console.log(`Deleting vendor with id: ${id}`);
     const result = await db.collection("vendors").deleteOne({ id });
+    console.log(`Delete result:`, result);
     if (result.deletedCount === 0) throw new Error("Vendor not found");
   }
 
   async deleteExpenseCategory(id: string): Promise<void> {
     const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
     // Check for related expenses
     const expenseCount = await db.collection("expenses").countDocuments({ categoryId: id });
     if (expenseCount > 0) {
       throw new Error("Cannot delete category with existing expenses. Delete expenses first or change category.");
     }
+    console.log(`Deleting expense category with id: ${id}`);
     const result = await db.collection("expenseCategories").deleteOne({ id });
+    console.log(`Delete result:`, result);
     if (result.deletedCount === 0) throw new Error("Expense category not found");
   }
 
   async deleteExpense(id: string): Promise<void> {
     const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
+    console.log(`Deleting expense with id: ${id}`);
     const result = await db.collection("expenses").deleteOne({ id });
+    console.log(`Delete result:`, result);
     if (result.deletedCount === 0) throw new Error("Expense not found");
   }
 
   async deleteTeamMember(id: string): Promise<void> {
     const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
     // Check for related salary payments
     const salaryCount = await db.collection("salaryPayments").countDocuments({ teamMemberId: id });
     if (salaryCount > 0) {
       throw new Error("Cannot delete team member with existing salary records. Delete salary records first.");
     }
+    console.log(`Deleting team member with id: ${id}`);
     const result = await db.collection("teamMembers").deleteOne({ id });
+    console.log(`Delete result:`, result);
     if (result.deletedCount === 0) throw new Error("Team member not found");
   }
 
   async deleteJobRole(id: string): Promise<void> {
     const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
+    console.log(`Deleting job role with id: ${id}`);
     const result = await db.collection("jobRoles").deleteOne({ id });
+    console.log(`Delete result:`, result);
     if (result.deletedCount === 0) throw new Error("Job role not found");
   }
 
   async deleteSalaryPayment(id: string): Promise<void> {
     const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
+    console.log(`Deleting salary payment with id: ${id}`);
     const result = await db.collection("salaryPayments").deleteOne({ id });
+    console.log(`Delete result:`, result);
     if (result.deletedCount === 0) throw new Error("Salary payment not found");
   }
 }

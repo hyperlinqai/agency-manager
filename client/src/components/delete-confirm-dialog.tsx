@@ -1,6 +1,5 @@
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -8,6 +7,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 
 interface DeleteConfirmDialogProps {
@@ -33,8 +33,15 @@ export function DeleteConfirmDialog({
     ? `Are you sure you want to delete "${itemName}"? This action cannot be undone.`
     : "Are you sure you want to delete this item? This action cannot be undone.";
 
+  // Only allow closing when not loading
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!isLoading) {
+      onOpenChange(newOpen);
+    }
+  };
+
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
@@ -44,13 +51,10 @@ export function DeleteConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={(e) => {
-              e.preventDefault();
-              onConfirm();
-            }}
+          <Button
+            variant="destructive"
+            onClick={onConfirm}
             disabled={isLoading}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
             {isLoading ? (
               <>
@@ -60,7 +64,7 @@ export function DeleteConfirmDialog({
             ) : (
               "Delete"
             )}
-          </AlertDialogAction>
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

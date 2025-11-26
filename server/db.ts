@@ -44,7 +44,11 @@ export async function connectDatabase(): Promise<Db> {
 
 export async function getDb(): Promise<Db> {
   if (!db) {
-    return await connectDatabase();
+    const result = await connectDatabase();
+    if (!result) {
+      throw new Error("Database connection failed. Please check your MongoDB connection.");
+    }
+    return result;
   }
   return db;
 }

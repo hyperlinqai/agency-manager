@@ -78,12 +78,17 @@ export default function InvoiceDetailPage() {
   // Convert logo URL to base64 for PDF rendering
   useEffect(() => {
     const convertLogoToBase64 = async () => {
-      if (!companyProfile?.logoUrl) return;
+      if (!companyProfile?.logoUrl) {
+        console.log("No logo URL in company profile");
+        return;
+      }
       
       const logoUrl = companyProfile.logoUrl;
+      console.log("Logo URL type:", logoUrl.substring(0, 50) + "...");
       
       // If already a data URL, use it directly
       if (logoUrl.startsWith('data:')) {
+        console.log("Logo is already base64, setting directly");
         setLogoBase64(logoUrl);
         return;
       }
@@ -102,6 +107,7 @@ export default function InvoiceDetailPage() {
             if (ctx) {
               ctx.drawImage(img, 0, 0);
               const dataUrl = canvas.toDataURL('image/png');
+              console.log("Logo converted to base64 via canvas");
               setLogoBase64(dataUrl);
             }
           } catch (canvasError) {
@@ -129,6 +135,7 @@ export default function InvoiceDetailPage() {
         const blob = await response.blob();
         const reader = new FileReader();
         reader.onloadend = () => {
+          console.log("Logo converted to base64 via fetch");
           setLogoBase64(reader.result as string);
         };
         reader.readAsDataURL(blob);
@@ -207,6 +214,7 @@ export default function InvoiceDetailPage() {
               
               {/* Download PDF */}
               <PDFDownloadLink
+                key={`pdf-${invoice.id}-${logoBase64?.slice(-20) || 'no-logo'}`}
                 document={
                   <InvoicePDF
                     invoice={invoice}
