@@ -187,9 +187,9 @@ export function TeamMemberDialog({ member, open, onClose }: TeamMemberDialogProp
                             </SelectItem>
                           ))
                         ) : (
-                          <SelectItem value="" disabled>
+                          <div className="px-2 py-4 text-sm text-muted-foreground text-center">
                             No job roles available. Add them in Settings.
-                          </SelectItem>
+                          </div>
                         )}
                       </SelectContent>
                     </Select>
