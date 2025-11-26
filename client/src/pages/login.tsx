@@ -4,13 +4,13 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Archive } from "lucide-react";
+import { Eye, EyeOff, Loader2, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { login, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
@@ -31,9 +31,8 @@ export default function LoginPage() {
       await login(email, password);
       toast({
         title: "Welcome back!",
-        description: "Successfully logged in to Agency Control Center",
+        description: "Successfully logged in to HQ CRM",
       });
-      // Redirect will happen via useEffect when isAuthenticated becomes true
     } catch (error) {
       toast({
         title: "Login failed",
@@ -44,69 +43,180 @@ export default function LoginPage() {
     }
   };
 
-  // If already authenticated, show redirect component
   if (isAuthenticated) {
     return <Redirect to="/" />;
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-4 text-center">
-          <div className="flex justify-center">
-            <div className="h-12 w-12 rounded-lg bg-primary flex items-center justify-center">
-              <Archive className="h-7 w-7 text-primary-foreground" />
+    <div className="min-h-screen flex">
+      {/* Left side - Branding */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 relative overflow-hidden">
+        {/* Abstract pattern overlay */}
+        <div className="absolute inset-0 opacity-30">
+          <div className="absolute top-1/4 -left-20 w-96 h-96 bg-primary/30 rounded-full blur-3xl" />
+          <div className="absolute bottom-1/4 right-0 w-80 h-80 bg-emerald-500/20 rounded-full blur-3xl" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-r from-primary/10 to-emerald-500/10 rounded-full blur-3xl" />
+        </div>
+        
+        {/* Grid pattern */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.02)_1px,transparent_1px)] bg-[size:72px_72px]" />
+        
+        {/* Content */}
+        <div className="relative z-10 flex flex-col justify-center px-12 lg:px-16">
+          <div className="space-y-8">
+            {/* Logo */}
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center shadow-lg shadow-primary/25">
+                <span className="text-white font-bold text-xl">H</span>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-white tracking-tight">HQ CRM</h1>
+                <p className="text-sm text-slate-400">by Hyperlinq Technology</p>
+              </div>
+            </div>
+            
+            {/* Tagline */}
+            <div className="space-y-4 max-w-md">
+              <h2 className="text-4xl lg:text-5xl font-bold text-white leading-tight tracking-tight">
+                Manage your business with confidence
+              </h2>
+              <p className="text-lg text-slate-400 leading-relaxed">
+                A complete CRM solution for managing clients, invoices, expenses, and your team all in one place.
+              </p>
+            </div>
+            
+            {/* Features */}
+            <div className="grid grid-cols-2 gap-4 pt-4">
+              {[
+                "Client Management",
+                "Invoice Generation",
+                "Expense Tracking",
+                "Team & Payroll",
+              ].map((feature) => (
+                <div key={feature} className="flex items-center gap-2 text-slate-300">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  <span className="text-sm">{feature}</span>
+                </div>
+              ))}
             </div>
           </div>
-          <div>
-            <CardTitle className="text-2xl font-semibold">Agency Control Center</CardTitle>
-            <CardDescription className="mt-2">
-              Sign in to access your dashboard
-            </CardDescription>
+        </div>
+      </div>
+
+      {/* Right side - Login form */}
+      <div className="flex-1 flex items-center justify-center p-8 bg-background">
+        <div className="w-full max-w-sm space-y-8">
+          {/* Mobile logo */}
+          <div className="lg:hidden flex justify-center mb-8">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center shadow-lg shadow-primary/25">
+                <span className="text-white font-bold text-lg">H</span>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-foreground tracking-tight">HQ CRM</h1>
+                <p className="text-xs text-muted-foreground">by Hyperlinq Technology</p>
+              </div>
+            </div>
           </div>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+
+          {/* Header */}
+          <div className="space-y-2 text-center lg:text-left">
+            <h2 className="text-2xl font-bold tracking-tight">Welcome back</h2>
+            <p className="text-muted-foreground">
+              Sign in to your account to continue
+            </p>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-sm font-medium">
+                Email address
+              </Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@agency.local"
+                placeholder="name@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                className="h-11 px-4 bg-background border-input focus:ring-2 focus:ring-primary/20 transition-all"
                 data-testid="input-email"
               />
             </div>
+            
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                data-testid="input-password"
-              />
+              <Label htmlFor="password" className="text-sm font-medium">
+                Password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="h-11 px-4 pr-11 bg-background border-input focus:ring-2 focus:ring-primary/20 transition-all"
+                  data-testid="input-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
+
             <Button
               type="submit"
-              className="w-full"
+              className="w-full h-11 bg-gradient-to-r from-primary to-emerald-500 hover:from-primary/90 hover:to-emerald-500/90 text-white font-semibold shadow-lg shadow-primary/25 transition-all duration-200"
               disabled={isLoading}
               data-testid="button-login"
             >
-              {isLoading ? "Signing in..." : "Sign In"}
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                <>
+                  Sign in
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </>
+              )}
             </Button>
           </form>
-          <div className="mt-6 text-center">
-            <p className="text-xs text-muted-foreground">
-              Default: admin@agency.local / admin123
-            </p>
+
+          {/* Demo credentials */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">Demo credentials</span>
+            </div>
           </div>
-        </CardContent>
-      </Card>
+
+          <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Email:</span>
+              <code className="font-mono text-foreground">admin@agency.local</code>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Password:</span>
+              <code className="font-mono text-foreground">admin123</code>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <p className="text-center text-xs text-muted-foreground">
+            By signing in, you agree to our terms of service and privacy policy.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

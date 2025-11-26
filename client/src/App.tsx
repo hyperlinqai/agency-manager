@@ -100,19 +100,25 @@ function Router() {
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const style = {
-    "--sidebar-width": "16rem",
-    "--sidebar-width-icon": "3rem",
+    "--sidebar-width": "16.5rem",
+    "--sidebar-width-icon": "3.5rem",
   };
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex h-screen w-full">
+      <div className="flex h-screen w-full bg-muted/30">
         <AppSidebar />
         <div className="flex flex-col flex-1 overflow-hidden">
-          <header className="flex items-center justify-between h-16 px-4 border-b bg-background sticky top-0 z-10">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
+          <header className="flex items-center h-14 px-4 bg-background/80 backdrop-blur-sm border-b sticky top-0 z-10">
+            <SidebarTrigger 
+              data-testid="button-sidebar-toggle" 
+              className="hover:bg-muted rounded-lg transition-colors"
+            />
+            <div className="ml-auto flex items-center gap-2">
+              {/* Space for future header items */}
+            </div>
           </header>
-          <main className="flex-1 overflow-y-auto bg-background">
+          <main className="flex-1 overflow-y-auto scrollbar-thin animate-fade-in">
             {children}
           </main>
         </div>

@@ -8,11 +8,24 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DollarSign, TrendingUp, AlertCircle, Users, TrendingDown, Wallet } from "lucide-react";
+import { 
+  DollarSign, 
+  TrendingUp, 
+  AlertCircle, 
+  Users, 
+  TrendingDown, 
+  Wallet,
+  Calendar,
+  ArrowUpRight,
+  ArrowDownRight,
+  Receipt,
+  Clock,
+} from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Link } from "wouter";
 import type { DashboardSummary, InvoiceWithRelations, FinancialSummary } from "@shared/schema";
-import { formatDate, formatCurrency } from "@/lib/utils";
+import { formatDate, formatCurrency, cn } from "@/lib/utils";
 
 export default function DashboardPage() {
   const { data: summary, isLoading: summaryLoading } = useQuery<DashboardSummary>({
@@ -27,110 +40,207 @@ export default function DashboardPage() {
     queryKey: ["/api/dashboard/financial"],
   });
 
-
   const MetricCard = ({
     title,
     value,
     icon: Icon,
     loading,
+    trend,
+    trendValue,
+    gradient,
   }: {
     title: string;
     value: string;
     icon: any;
     loading: boolean;
+    trend?: "up" | "down" | "neutral";
+    trendValue?: string;
+    gradient?: string;
   }) => (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
+    <Card className="relative overflow-hidden border-0 shadow-sm hover:shadow-md transition-all duration-200 group">
+      <div className={cn(
+        "absolute inset-0 opacity-5 group-hover:opacity-10 transition-opacity",
+        gradient || "bg-gradient-to-br from-primary to-primary"
+      )} />
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        <div className={cn(
+          "h-9 w-9 rounded-xl flex items-center justify-center",
+          gradient || "bg-primary/10"
+        )}>
+          <Icon className="h-4 w-4 text-primary" />
+        </div>
       </CardHeader>
       <CardContent>
         {loading ? (
           <Skeleton className="h-8 w-32" />
         ) : (
-          <div className="text-2xl font-semibold font-mono" data-testid={`metric-${title.toLowerCase().replace(/\s+/g, "-")}`}>{value}</div>
+          <div className="space-y-1">
+            <div className="text-2xl font-bold tracking-tight font-mono" data-testid={`metric-${title.toLowerCase().replace(/\s+/g, "-")}`}>
+              {value}
+            </div>
+            {trend && trendValue && (
+              <div className={cn(
+                "flex items-center gap-1 text-xs font-medium",
+                trend === "up" && "text-green-600",
+                trend === "down" && "text-red-600",
+                trend === "neutral" && "text-muted-foreground"
+              )}>
+                {trend === "up" && <ArrowUpRight className="h-3 w-3" />}
+                {trend === "down" && <ArrowDownRight className="h-3 w-3" />}
+                {trendValue}
+              </div>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
   );
 
+  const FinancialCard = ({
+    title,
+    value,
+    subtitle,
+    icon: Icon,
+    color,
+  }: {
+    title: string;
+    value: string;
+    subtitle: string;
+    icon: any;
+    color: "green" | "red" | "blue" | "amber";
+  }) => {
+    const colorClasses = {
+      green: "bg-green-50 dark:bg-green-950/30 text-green-600 border-green-200 dark:border-green-900",
+      red: "bg-red-50 dark:bg-red-950/30 text-red-600 border-red-200 dark:border-red-900",
+      blue: "bg-blue-50 dark:bg-blue-950/30 text-blue-600 border-blue-200 dark:border-blue-900",
+      amber: "bg-amber-50 dark:bg-amber-950/30 text-amber-600 border-amber-200 dark:border-amber-900",
+    };
+
+    return (
+      <div className={cn("rounded-xl border p-5 transition-all hover:shadow-sm", colorClasses[color])}>
+        <div className="flex items-center gap-2 mb-3">
+          <Icon className="h-4 w-4" />
+          <span className="text-sm font-medium">{title}</span>
+        </div>
+        <div className={cn("text-2xl font-bold font-mono", `text-${color}-600`)}>
+          {value}
+        </div>
+        <p className="text-xs mt-1 opacity-70">{subtitle}</p>
+      </div>
+    );
+  };
+
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Overview of your agency's financial performance
-        </p>
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">
+            Welcome back! Here's your business overview.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 px-3 py-2 rounded-lg">
+          <Calendar className="h-4 w-4" />
+          {new Date().toLocaleDateString('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          })}
+        </div>
       </div>
 
-      {/* Summary Cards */}
+      {/* Main Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
-          title="Total Invoiced"
+          title="Total Revenue"
           value={formatCurrency(summary?.totalInvoiced || 0)}
           icon={DollarSign}
           loading={summaryLoading}
+          gradient="bg-gradient-to-br from-green-500 to-emerald-600"
+          trend="up"
+          trendValue="All time"
         />
         <MetricCard
-          title="Total Paid"
+          title="Collected"
           value={formatCurrency(summary?.totalPaid || 0)}
           icon={TrendingUp}
           loading={summaryLoading}
+          gradient="bg-gradient-to-br from-blue-500 to-cyan-600"
         />
         <MetricCard
           title="Outstanding"
           value={formatCurrency(summary?.totalOutstanding || 0)}
           icon={AlertCircle}
           loading={summaryLoading}
+          gradient="bg-gradient-to-br from-amber-500 to-orange-600"
         />
         <MetricCard
           title="Active Clients"
           value={summary?.countActiveClients?.toString() || "0"}
           icon={Users}
           loading={summaryLoading}
+          gradient="bg-gradient-to-br from-purple-500 to-pink-600"
         />
       </div>
 
-      {/* This Month Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">This Month Invoiced</CardTitle>
+      {/* This Month Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+              <Receipt className="h-4 w-4" />
+              This Month Invoiced
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {summaryLoading ? (
               <Skeleton className="h-7 w-28" />
             ) : (
-              <div className="text-xl font-semibold font-mono" data-testid="metric-this-month-invoiced">
+              <div className="text-2xl font-bold font-mono" data-testid="metric-this-month-invoiced">
                 {formatCurrency(summary?.thisMonthInvoiced || 0)}
               </div>
             )}
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">This Month Collected</CardTitle>
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+              <Wallet className="h-4 w-4" />
+              This Month Collected
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {summaryLoading ? (
               <Skeleton className="h-7 w-28" />
             ) : (
-              <div className="text-xl font-semibold font-mono" data-testid="metric-this-month-collected">
+              <div className="text-2xl font-bold font-mono text-green-600" data-testid="metric-this-month-collected">
                 {formatCurrency(summary?.thisMonthCollected || 0)}
               </div>
             )}
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Overdue Invoices</CardTitle>
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+              <Clock className="h-4 w-4" />
+              Overdue Invoices
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {summaryLoading ? (
               <Skeleton className="h-7 w-16" />
             ) : (
-              <div className="text-xl font-semibold" data-testid="metric-overdue-count">
+              <div className={cn(
+                "text-2xl font-bold",
+                (summary?.countOverdueInvoices || 0) > 0 ? "text-red-600" : "text-green-600"
+              )} data-testid="metric-overdue-count">
                 {summary?.countOverdueInvoices || 0}
+                <span className="text-sm font-normal ml-2 text-muted-foreground">
+                  {(summary?.countOverdueInvoices || 0) === 1 ? "invoice" : "invoices"}
+                </span>
               </div>
             )}
           </CardContent>
@@ -138,120 +248,133 @@ export default function DashboardPage() {
       </div>
 
       {/* Financial Overview */}
-      <Card>
+      <Card className="border-0 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-lg font-medium">Financial Overview (All Time)</CardTitle>
+          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Financial Overview
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">All-time performance metrics</p>
         </CardHeader>
         <CardContent>
           {financialLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-24 w-full" />
+                <Skeleton key={i} className="h-28 w-full rounded-xl" />
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="border rounded-lg p-4">
-                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-2">
-                  <TrendingUp className="h-4 w-4" />
-                  <span>Total Income</span>
-                </div>
-                <div className="text-2xl font-semibold font-mono text-green-600" data-testid="metric-total-income">
-                  {formatCurrency(financialSummary?.totalIncome || 0)}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">From invoices</p>
-              </div>
-              <div className="border rounded-lg p-4">
-                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-2">
-                  <TrendingDown className="h-4 w-4" />
-                  <span>Total Expenses</span>
-                </div>
-                <div className="text-2xl font-semibold font-mono text-red-600" data-testid="metric-total-expenses">
-                  {formatCurrency(financialSummary?.totalExpenses || 0)}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">All business costs</p>
-              </div>
-              <div className="border rounded-lg p-4">
-                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-2">
-                  <Wallet className="h-4 w-4" />
-                  <span>Net Profit/Loss</span>
-                </div>
-                <div
-                  className={`text-2xl font-semibold font-mono ${
-                    (financialSummary?.netProfit || 0) >= 0 ? "text-green-600" : "text-red-600"
-                  }`}
-                  data-testid="metric-net-profit"
-                >
-                  {formatCurrency(financialSummary?.netProfit || 0)}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">Income - Expenses</p>
-              </div>
-              <div className="border rounded-lg p-4">
-                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-2">
-                  <DollarSign className="h-4 w-4" />
-                  <span>Profit Margin</span>
-                </div>
-                <div className="text-2xl font-semibold" data-testid="metric-profit-margin">
-                  {financialSummary?.totalIncome && financialSummary.totalIncome > 0
-                    ? `${((financialSummary.netProfit / financialSummary.totalIncome) * 100).toFixed(1)}%`
-                    : "0%"}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">Net margin</p>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <FinancialCard
+                title="Total Income"
+                value={formatCurrency(financialSummary?.totalIncome || 0)}
+                subtitle="From paid invoices"
+                icon={TrendingUp}
+                color="green"
+              />
+              <FinancialCard
+                title="Total Expenses"
+                value={formatCurrency(financialSummary?.totalExpenses || 0)}
+                subtitle="All business costs"
+                icon={TrendingDown}
+                color="red"
+              />
+              <FinancialCard
+                title="Net Profit"
+                value={formatCurrency(financialSummary?.netProfit || 0)}
+                subtitle="Income - Expenses"
+                icon={Wallet}
+                color={(financialSummary?.netProfit || 0) >= 0 ? "green" : "red"}
+              />
+              <FinancialCard
+                title="Profit Margin"
+                value={financialSummary?.totalIncome && financialSummary.totalIncome > 0
+                  ? `${((financialSummary.netProfit / financialSummary.totalIncome) * 100).toFixed(1)}%`
+                  : "0%"}
+                subtitle="Net margin ratio"
+                icon={DollarSign}
+                color="blue"
+              />
             </div>
           )}
         </CardContent>
       </Card>
 
       {/* Upcoming Invoices */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg font-medium">Upcoming Invoice Due Dates</CardTitle>
+      <Card className="border-0 shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-primary" />
+              Upcoming Due Dates
+            </CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">Invoices due in the next 30 days</p>
+          </div>
+          <Link href="/invoices" className="text-sm font-medium text-primary hover:underline">
+            View all →
+          </Link>
         </CardHeader>
         <CardContent>
           {invoicesLoading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-12 w-full" />
+                <Skeleton key={i} className="h-14 w-full rounded-lg" />
               ))}
             </div>
           ) : !upcomingInvoices || upcomingInvoices.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <AlertCircle className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>No upcoming invoices</p>
+            <div className="text-center py-12">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted/50 flex items-center justify-center">
+                <AlertCircle className="h-8 w-8 text-muted-foreground/50" />
+              </div>
+              <p className="text-muted-foreground font-medium">No upcoming invoices</p>
+              <p className="text-sm text-muted-foreground/70 mt-1">
+                All invoices are paid or have later due dates
+              </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto -mx-6">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Invoice #</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Project</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead className="text-right">Balance Due</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead>Status</TableHead>
+                  <TableRow className="border-none hover:bg-transparent">
+                    <TableHead className="pl-6 text-xs uppercase tracking-wider font-semibold text-muted-foreground">Invoice #</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Client</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Project</TableHead>
+                    <TableHead className="text-right text-xs uppercase tracking-wider font-semibold text-muted-foreground">Amount</TableHead>
+                    <TableHead className="text-right text-xs uppercase tracking-wider font-semibold text-muted-foreground">Balance</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Due Date</TableHead>
+                    <TableHead className="pr-6 text-xs uppercase tracking-wider font-semibold text-muted-foreground">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {upcomingInvoices.map((invoice) => (
-                    <TableRow key={invoice.id} data-testid={`row-invoice-${invoice.id}`}>
-                      <TableCell className="font-mono text-sm" data-testid={`text-invoice-number-${invoice.id}`}>
-                        {invoice.invoiceNumber}
+                    <TableRow 
+                      key={invoice.id} 
+                      className="border-none hover:bg-muted/30 cursor-pointer transition-colors"
+                      data-testid={`row-invoice-${invoice.id}`}
+                    >
+                      <TableCell className="pl-6">
+                        <Link href={`/invoices/${invoice.id}`}>
+                          <span className="font-mono text-sm font-medium text-primary hover:underline" data-testid={`text-invoice-number-${invoice.id}`}>
+                            {invoice.invoiceNumber}
+                          </span>
+                        </Link>
                       </TableCell>
-                      <TableCell data-testid={`text-client-${invoice.id}`}>{invoice.clientName}</TableCell>
-                      <TableCell data-testid={`text-project-${invoice.id}`}>{invoice.projectName || "—"}</TableCell>
-                      <TableCell className="text-right font-mono" data-testid={`text-amount-${invoice.id}`}>
+                      <TableCell className="font-medium" data-testid={`text-client-${invoice.id}`}>
+                        {invoice.clientName}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground" data-testid={`text-project-${invoice.id}`}>
+                        {invoice.projectName || "—"}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm" data-testid={`text-amount-${invoice.id}`}>
                         {formatCurrency(invoice.totalAmount)}
                       </TableCell>
-                      <TableCell className="text-right font-mono" data-testid={`text-balance-${invoice.id}`}>
+                      <TableCell className="text-right font-mono text-sm font-medium" data-testid={`text-balance-${invoice.id}`}>
                         {formatCurrency(invoice.balanceDue)}
                       </TableCell>
                       <TableCell data-testid={`text-due-date-${invoice.id}`}>
-                        {formatDate(invoice.dueDate)}
+                        <span className="text-sm">{formatDate(invoice.dueDate)}</span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="pr-6">
                         <StatusBadge status={invoice.status} type="invoice" />
                       </TableCell>
                     </TableRow>
