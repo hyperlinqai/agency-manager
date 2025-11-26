@@ -153,6 +153,9 @@ export default function TeamSalariesPage() {
                         Role
                       </th>
                       <th className="text-left px-4 py-3 text-sm font-medium uppercase tracking-wide">
+                        Type
+                      </th>
+                      <th className="text-left px-4 py-3 text-sm font-medium uppercase tracking-wide">
                         Email
                       </th>
                       <th className="text-right px-4 py-3 text-sm font-medium uppercase tracking-wide">
@@ -172,7 +175,7 @@ export default function TeamSalariesPage() {
                   <tbody>
                     {teamMembers.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                        <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
                           No team members found. Click "Add Team Member" to create one.
                         </td>
                       </tr>
@@ -193,6 +196,11 @@ export default function TeamSalariesPage() {
                             <div className="text-sm" data-testid={`member-role-${member.id}`}>
                               {member.roleTitle}
                             </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant="outline" data-testid={`member-type-${member.id}`}>
+                              {member.employmentType?.replace("_", " ") || "Full Time"}
+                            </Badge>
                           </td>
                           <td className="px-4 py-3">
                             <div className="text-sm" data-testid={`member-email-${member.id}`}>
@@ -331,7 +339,7 @@ export default function TeamSalariesPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="text-sm font-medium tabular-nums" data-testid={`salary-amount-${salary.id}`}>
-                              {formatCurrency(Number(salary.amount), salary.currency)}
+                              {formatCurrency(Number(salary.amount))}
                             </div>
                           </td>
                           <td className="px-4 py-3">

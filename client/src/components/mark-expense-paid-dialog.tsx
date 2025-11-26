@@ -60,7 +60,7 @@ export function MarkExpensePaidDialog({ expense, open, onClose }: MarkExpensePai
 
   const markPaidMutation = useMutation({
     mutationFn: async (data: MarkPaidForm) => {
-      return apiRequest(`/api/expenses/${expense.id}/mark-paid`, "POST", data);
+      return apiRequest("POST", `/api/expenses/${expense.id}/mark-paid`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
@@ -86,7 +86,7 @@ export function MarkExpensePaidDialog({ expense, open, onClose }: MarkExpensePai
         <div className="mb-4 p-4 bg-muted rounded-lg">
           <div className="text-sm text-muted-foreground">Amount to pay</div>
           <div className="text-2xl font-semibold mt-1" data-testid="expense-amount">
-            {formatCurrency(Number(expense.amount), expense.currency)}
+            {formatCurrency(Number(expense.amount))}
           </div>
           <div className="text-sm text-muted-foreground mt-2">{expense.description}</div>
         </div>

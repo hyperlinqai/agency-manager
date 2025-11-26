@@ -27,10 +27,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Pencil, Building2, Save } from "lucide-react";
+import { Plus, Pencil, Building2, Save, Briefcase, Download } from "lucide-react";
 import { ServiceDialog } from "@/components/service-dialog";
+import { JobRoleDialog } from "@/components/job-role-dialog";
 import { Badge } from "@/components/ui/badge";
-import type { Service, CompanyProfile } from "@shared/schema";
+import type { Service, CompanyProfile, JobRole } from "@shared/schema";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -42,10 +43,35 @@ import { z } from "zod";
 export default function SettingsPage() {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [isServiceDialogOpen, setIsServiceDialogOpen] = useState(false);
+  const [selectedJobRole, setSelectedJobRole] = useState<JobRole | null>(null);
+  const [isJobRoleDialogOpen, setIsJobRoleDialogOpen] = useState(false);
 
   const { data: services, isLoading } = useQuery<Service[]>({
     queryKey: ["/api/services"],
   });
+
+  const { data: jobRoles = [], isLoading: isLoadingJobRoles } = useQuery<JobRole[]>({
+    queryKey: ["/api/job-roles"],
+  });
+
+  const { toast } = useToast();
+
+  const seedJobRolesMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/job-roles/seed-defaults");
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/job-roles"] });
+      toast({ title: "Success", description: `Job roles loaded. Total: ${data.count} roles` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleSeedJobRoles = () => {
+    seedJobRolesMutation.mutate();
+  };
 
   const handleNewService = () => {
     setSelectedService(null);
@@ -60,6 +86,21 @@ export default function SettingsPage() {
   const handleCloseDialog = () => {
     setIsServiceDialogOpen(false);
     setSelectedService(null);
+  };
+
+  const handleNewJobRole = () => {
+    setSelectedJobRole(null);
+    setIsJobRoleDialogOpen(true);
+  };
+
+  const handleEditJobRole = (role: JobRole) => {
+    setSelectedJobRole(role);
+    setIsJobRoleDialogOpen(true);
+  };
+
+  const handleCloseJobRoleDialog = () => {
+    setIsJobRoleDialogOpen(false);
+    setSelectedJobRole(null);
   };
 
   const getCategoryLabel = (category: string) => {
@@ -88,6 +129,7 @@ export default function SettingsPage() {
       <Tabs defaultValue="services" className="w-full">
         <TabsList>
           <TabsTrigger value="services" data-testid="tab-services">Services</TabsTrigger>
+          <TabsTrigger value="job-roles" data-testid="tab-job-roles">Job Roles</TabsTrigger>
           <TabsTrigger value="company" data-testid="tab-company">Company Info</TabsTrigger>
         </TabsList>
 
@@ -183,6 +225,104 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="job-roles" className="space-y-4 mt-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Briefcase className="h-5 w-5 text-primary" />
+                  <CardTitle>Job Roles</CardTitle>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={handleSeedJobRoles}
+                    disabled={seedJobRolesMutation.isPending}
+                    data-testid="button-load-default-roles"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    {seedJobRolesMutation.isPending ? "Loading..." : "Load Default Roles"}
+                  </Button>
+                  <Button onClick={handleNewJobRole} data-testid="button-new-job-role">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Job Role
+                  </Button>
+                </div>
+              </div>
+              <CardDescription>
+                Manage job roles for team members. Click "Load Default Roles" to add common marketing agency roles.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingJobRoles ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              ) : jobRoles && jobRoles.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Title</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Updated</TableHead>
+                      <TableHead className="w-20"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {jobRoles.map((role) => (
+                      <TableRow key={role.id} data-testid={`row-job-role-${role.id}`}>
+                        <TableCell className="font-medium" data-testid={`text-title-${role.id}`}>
+                          {role.title}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground" data-testid={`text-description-${role.id}`}>
+                          {role.description || "-"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={role.status === "ACTIVE" ? "bg-green-100 text-green-800 border-green-200" : "bg-gray-100 text-gray-800 border-gray-200"}
+                            data-testid={`badge-status-${role.id}`}
+                          >
+                            {role.status === "ACTIVE" ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground" data-testid={`text-updated-${role.id}`}>
+                          {formatDate(role.updatedAt)}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEditJobRole(role)}
+                            data-testid={`button-edit-${role.id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-12" data-testid="empty-state-job-roles">
+                  <Briefcase className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">No job roles found</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Create job roles to use in team member profiles
+                  </p>
+                  <Button onClick={handleNewJobRole} className="mt-4" data-testid="button-create-first-job-role">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Job Role
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="company" className="space-y-4 mt-6">
           <CompanySettingsForm />
         </TabsContent>
@@ -193,20 +333,29 @@ export default function SettingsPage() {
         open={isServiceDialogOpen}
         onClose={handleCloseDialog}
       />
+
+      <JobRoleDialog
+        role={selectedJobRole}
+        open={isJobRoleDialogOpen}
+        onClose={handleCloseJobRoleDialog}
+      />
     </div>
   );
 }
 
 function CompanySettingsForm() {
   const { toast } = useToast();
-  const { data: companyProfile, isLoading } = useQuery<CompanyProfile>({
+  const { data: companyProfile, isLoading } = useQuery<CompanyProfile | null>({
     queryKey: ["/api/settings/company"],
   });
+
+  const MAX_LOGO_FILE_SIZE = 1024 * 1024; // 1MB
 
   const form = useForm<z.infer<typeof insertCompanyProfileSchema>>({
     resolver: zodResolver(insertCompanyProfileSchema),
     defaultValues: {
       companyName: "",
+      logoUrl: "",
       addressLine1: "",
       addressLine2: "",
       city: "",
@@ -231,9 +380,9 @@ function CompanySettingsForm() {
   const updateMutation = useMutation({
     mutationFn: async (data: z.infer<typeof insertCompanyProfileSchema>) => {
       if (!companyProfile?.id) {
-        return await apiRequest("/api/settings/company", "POST", data);
+        return await apiRequest("POST", "/api/settings/company", data);
       }
-      return await apiRequest(`/api/settings/company/${companyProfile.id}`, "PUT", data);
+      return await apiRequest("PUT", `/api/settings/company/${companyProfile.id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings/company"] });
@@ -285,6 +434,74 @@ function CompanySettingsForm() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="logoUrl"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Brand Logo</FormLabel>
+                    <FormControl>
+                      <div className="flex flex-col gap-4">
+                        <div className="flex items-center gap-4">
+                          {field.value ? (
+                            <img
+                              src={field.value}
+                              alt="Logo preview"
+                              className="h-16 w-16 rounded-lg border object-cover bg-muted"
+                            />
+                          ) : (
+                            <div className="h-16 w-16 rounded-lg border flex items-center justify-center text-xs text-muted-foreground bg-muted/30">
+                              No logo
+                            </div>
+                          )}
+                          {field.value && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => field.onChange("")}
+                            >
+                              Remove
+                            </Button>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <Input
+                            type="file"
+                            accept="image/png,image/jpeg,image/svg+xml"
+                            onChange={async (event) => {
+                              const file = event.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > MAX_LOGO_FILE_SIZE) {
+                                toast({
+                                  title: "Logo too large",
+                                  description: "Please upload an image under 1MB.",
+                                  variant: "destructive",
+                                });
+                                event.target.value = "";
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                if (typeof reader.result === "string") {
+                                  field.onChange(reader.result);
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                              event.target.value = "";
+                            }}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Upload a PNG, JPG, or SVG (max 1MB). This logo will appear on invoices.
+                          </p>
+                        </div>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="companyName"

@@ -89,7 +89,7 @@ export default function ExpensesPage() {
     .filter((exp) => exp.status === "PAID")
     .reduce((sum, exp) => sum + Number(exp.amount), 0);
   const dueExpenses = expenses
-    .filter((exp) => exp.status === "DUE" || exp.status === "OVERDUE")
+    .filter((exp) => exp.status === "DUE")
     .reduce((sum, exp) => sum + Number(exp.amount), 0);
 
   return (
@@ -235,7 +235,7 @@ export default function ExpensesPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="text-sm font-medium tabular-nums" data-testid={`expense-amount-${expense.id}`}>
-                        {formatCurrency(Number(expense.amount), expense.currency)}
+                        {formatCurrency(Number(expense.amount))}
                       </div>
                     </td>
                     <td className="px-4 py-3">

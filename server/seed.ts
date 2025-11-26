@@ -674,6 +674,6 @@ export async function seedDatabase() {
     console.log("Password: admin123");
   } catch (error) {
     console.error("Error seeding database:", error);
-    throw error;
+    // Don't throw - allow server to continue without seeding
   }
 }

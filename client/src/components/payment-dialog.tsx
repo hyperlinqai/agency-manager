@@ -128,7 +128,13 @@ export function PaymentDialog({ open, onOpenChange, invoiceId, maxAmount }: Paym
                 <FormItem>
                   <FormLabel>Payment Date *</FormLabel>
                   <FormControl>
-                    <Input type="date" {...field} data-testid="input-payment-date" />
+                    <Input 
+                      type="date" 
+                      value={typeof field.value === "string" ? field.value : (field.value ? new Date(field.value).toISOString().split("T")[0] : "")}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      onBlur={field.onBlur}
+                      data-testid="input-payment-date" 
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

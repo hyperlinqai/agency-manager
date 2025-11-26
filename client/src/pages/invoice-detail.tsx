@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
+import { PDFDownloadLink } from "@react-pdf/renderer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -14,10 +15,12 @@ import {
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, Plus, Download, FileText, ExternalLink } from "lucide-react";
 import { PaymentDialog } from "@/components/payment-dialog";
-import type { InvoiceWithRelations, Payment } from "@shared/schema";
+import { InvoicePDF } from "@/components/invoice-pdf";
+import type { InvoiceWithRelations, Payment, CompanyProfile, Client } from "@shared/schema";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function InvoiceDetailPage() {
   const [, params] = useRoute("/invoices/:id");
@@ -27,12 +30,45 @@ export default function InvoiceDetailPage() {
   const { data: invoice, isLoading } = useQuery<InvoiceWithRelations>({
     queryKey: ["/api/invoices", invoiceId],
     enabled: !!invoiceId,
+    queryFn: async () => {
+      if (!invoiceId) return null;
+      return apiRequest("GET", `/api/invoices/${invoiceId}`);
+    },
   });
 
   const { data: payments } = useQuery<Payment[]>({
     queryKey: ["/api/invoices", invoiceId, "payments"],
     enabled: !!invoiceId,
+    queryFn: async () => {
+      if (!invoiceId) return [];
+      return apiRequest("GET", `/api/invoices/${invoiceId}/payments`);
+    },
   });
+
+  const { data: companyProfile } = useQuery<CompanyProfile>({
+    queryKey: ["/api/settings/company"],
+    queryFn: async () => {
+      return apiRequest("GET", "/api/settings/company");
+    },
+  });
+
+  const { data: client } = useQuery<Client>({
+    queryKey: ["/api/clients", invoice?.clientId],
+    enabled: !!invoice?.clientId,
+    queryFn: async () => {
+      if (!invoice?.clientId) return null;
+      return apiRequest("GET", `/api/clients/${invoice.clientId}`);
+    },
+  });
+
+  const clientAddress = client
+    ? [
+        client.address,
+        client.companyWebsite,
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : undefined;
 
 
   if (isLoading) {
@@ -69,6 +105,49 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {invoice && (
+            <>
+              {/* View Invoice - Opens printable HTML version */}
+              <Button 
+                variant="outline" 
+                onClick={() => window.open(`/invoice/${invoiceId}/view`, '_blank')}
+                data-testid="button-view-invoice"
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                View Invoice
+              </Button>
+              
+              {/* Download PDF */}
+              <PDFDownloadLink
+                document={
+                  <InvoicePDF
+                    invoice={invoice}
+                    companyProfile={companyProfile}
+                    clientAddress={clientAddress}
+                    clientEmail={client?.email}
+                    payments={payments}
+                  />
+                }
+                fileName={`${invoice.invoiceNumber}.pdf`}
+              >
+                {({ loading }) => (
+                  <Button variant="outline" disabled={loading} data-testid="button-download-pdf">
+                    {loading ? (
+                      <>
+                        <FileText className="h-4 w-4 mr-2" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        Download PDF
+                      </>
+                    )}
+                  </Button>
+                )}
+              </PDFDownloadLink>
+            </>
+          )}
           <StatusBadge status={invoice.status} type="invoice" />
           {invoice.status !== "PAID" && (
             <Button onClick={() => setIsPaymentDialogOpen(true)} data-testid="button-record-payment">

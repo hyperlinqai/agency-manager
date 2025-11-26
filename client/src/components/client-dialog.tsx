@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
@@ -42,7 +43,7 @@ export function ClientDialog({ open, onOpenChange, client }: ClientDialogProps) 
 
   const form = useForm<InsertClient>({
     resolver: zodResolver(insertClientSchema),
-    defaultValues: client || {
+    defaultValues: {
       name: "",
       contactName: "",
       email: "",
@@ -51,8 +52,37 @@ export function ClientDialog({ open, onOpenChange, client }: ClientDialogProps) 
       address: "",
       status: "ACTIVE",
       notes: "",
+      portalUrl: "",
     },
   });
+
+  useEffect(() => {
+    if (client) {
+      form.reset({
+        name: client.name,
+        contactName: client.contactName,
+        email: client.email,
+        phone: client.phone,
+        companyWebsite: client.companyWebsite || "",
+        address: client.address || "",
+        status: client.status,
+        notes: client.notes || "",
+        portalUrl: client.portalUrl || "",
+      });
+    } else {
+      form.reset({
+        name: "",
+        contactName: "",
+        email: "",
+        phone: "",
+        companyWebsite: "",
+        address: "",
+        status: "ACTIVE",
+        notes: "",
+        portalUrl: "",
+      });
+    }
+  }, [client, form]);
 
   const mutation = useMutation({
     mutationFn: async (data: InsertClient) => {

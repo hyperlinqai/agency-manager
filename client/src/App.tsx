@@ -23,7 +23,6 @@ import SettingsPage from "@/pages/settings";
 function Router() {
   return (
     <Switch>
-      <Route path="/login" component={LoginPage} />
       <Route path="/">
         {() => (
           <ProtectedRoute>
@@ -127,16 +126,18 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
-          <Route path="/login">
-            {(params) => <Router />}
-          </Route>
-          <Route path="*">
-            {(params) => (
-              <AppLayout>
-                <Router />
-              </AppLayout>
-            )}
-          </Route>
+          <Switch>
+            <Route path="/login">
+              <LoginPage />
+            </Route>
+            <Route path="*">
+              {(params) => (
+                <AppLayout>
+                  <Router />
+                </AppLayout>
+              )}
+            </Route>
+          </Switch>
           <Toaster />
         </TooltipProvider>
       </AuthProvider>

@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
-import { insertTeamMemberSchema, type InsertTeamMember, type TeamMember } from "@shared/schema";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { insertTeamMemberSchema, type InsertTeamMember, type TeamMember, type JobRole } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -40,12 +40,17 @@ interface TeamMemberDialogProps {
 export function TeamMemberDialog({ member, open, onClose }: TeamMemberDialogProps) {
   const { toast } = useToast();
 
+  const { data: jobRoles = [] } = useQuery<JobRole[]>({
+    queryKey: ["/api/job-roles", { status: "ACTIVE" }],
+  });
+
   const form = useForm<InsertTeamMember>({
     resolver: zodResolver(insertTeamMemberSchema),
     defaultValues: {
       name: "",
       email: "",
       roleTitle: "",
+      employmentType: "FULL_TIME",
       status: "ACTIVE",
       baseSalary: 0,
       joinedDate: new Date().toISOString().split("T")[0],
@@ -60,6 +65,7 @@ export function TeamMemberDialog({ member, open, onClose }: TeamMemberDialogProp
         name: member.name,
         email: member.email,
         roleTitle: member.roleTitle,
+        employmentType: member.employmentType || "FULL_TIME",
         status: member.status,
         baseSalary: Number(member.baseSalary),
         joinedDate: member.joinedDate ? new Date(member.joinedDate).toISOString().split("T")[0] : "",
@@ -71,6 +77,7 @@ export function TeamMemberDialog({ member, open, onClose }: TeamMemberDialogProp
         name: "",
         email: "",
         roleTitle: "",
+        employmentType: "FULL_TIME",
         status: "ACTIVE",
         baseSalary: 0,
         joinedDate: new Date().toISOString().split("T")[0],
@@ -82,7 +89,7 @@ export function TeamMemberDialog({ member, open, onClose }: TeamMemberDialogProp
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertTeamMember) => {
-      return apiRequest("/api/team-members", "POST", data);
+      return apiRequest("POST", "/api/team-members", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
@@ -96,7 +103,7 @@ export function TeamMemberDialog({ member, open, onClose }: TeamMemberDialogProp
 
   const updateMutation = useMutation({
     mutationFn: async (data: InsertTeamMember) => {
-      return apiRequest(`/api/team-members/${member?.id}`, "PUT", data);
+      return apiRequest("PUT", `/api/team-members/${member?.id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
@@ -166,14 +173,58 @@ export function TeamMemberDialog({ member, open, onClose }: TeamMemberDialogProp
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Role/Title</FormLabel>
-                    <FormControl>
-                      <Input {...field} data-testid="input-role" />
-                    </FormControl>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-role">
+                          <SelectValue placeholder="Select role" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {jobRoles.length > 0 ? (
+                          jobRoles.map((role) => (
+                            <SelectItem key={role.id} value={role.title}>
+                              {role.title}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="" disabled>
+                            No job roles available. Add them in Settings.
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
+              <FormField
+                control={form.control}
+                name="employmentType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Employment Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-employment-type">
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="FULL_TIME">Full Time</SelectItem>
+                        <SelectItem value="PART_TIME">Part Time</SelectItem>
+                        <SelectItem value="CONTRACT">Contract</SelectItem>
+                        <SelectItem value="FREELANCE">Freelance</SelectItem>
+                        <SelectItem value="INTERN">Intern</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="baseSalary"
@@ -193,6 +244,28 @@ export function TeamMemberDialog({ member, open, onClose }: TeamMemberDialogProp
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-status">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="ACTIVE">Active</SelectItem>
+                        <SelectItem value="INACTIVE">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -203,7 +276,13 @@ export function TeamMemberDialog({ member, open, onClose }: TeamMemberDialogProp
                   <FormItem>
                     <FormLabel>Joined Date</FormLabel>
                     <FormControl>
-                      <Input {...field} type="date" data-testid="input-joined-date" />
+                      <Input 
+                        type="date" 
+                        value={typeof field.value === "string" ? field.value : (field.value ? new Date(field.value).toISOString().split("T")[0] : "")}
+                        onChange={(e) => field.onChange(e.target.value)}
+                        onBlur={field.onBlur}
+                        data-testid="input-joined-date" 
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -218,9 +297,10 @@ export function TeamMemberDialog({ member, open, onClose }: TeamMemberDialogProp
                     <FormLabel>Exit Date (Optional)</FormLabel>
                     <FormControl>
                       <Input
-                        {...field}
-                        value={field.value || ""}
                         type="date"
+                        value={field.value ? (typeof field.value === "string" ? field.value : new Date(field.value).toISOString().split("T")[0]) : ""}
+                        onChange={(e) => field.onChange(e.target.value || undefined)}
+                        onBlur={field.onBlur}
                         data-testid="input-exit-date"
                       />
                     </FormControl>
@@ -229,28 +309,6 @@ export function TeamMemberDialog({ member, open, onClose }: TeamMemberDialogProp
                 )}
               />
             </div>
-
-            <FormField
-              control={form.control}
-              name="status"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Status</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-status">
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="ACTIVE">Active</SelectItem>
-                      <SelectItem value="INACTIVE">Inactive</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
             <FormField
               control={form.control}

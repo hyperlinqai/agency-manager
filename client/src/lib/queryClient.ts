@@ -22,15 +22,48 @@ async function handleRequest(url: string, options: RequestInit = {}) {
     headers,
   });
 
+  // Clone the response so we can read the body multiple times if needed
+  const responseClone = response.clone();
+
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
+      // Try to get error message from response
+      let errorMessage = "Authentication failed";
+      try {
+        const responseText = await responseClone.text();
+        if (responseText) {
+          try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } catch {
+            errorMessage = responseText;
+          }
+        }
+      } catch {
+        // Ignore parsing errors
+      }
+      
+      console.error("Authentication error:", errorMessage);
       localStorage.removeItem("user");
       window.location.href = "/login";
-      throw new Error("Authentication failed");
+      throw new Error(errorMessage);
     }
 
-    const error = await response.text();
-    throw new Error(error || `Request failed: ${response.status}`);
+    let errorMessage = `Request failed: ${response.status}`;
+    try {
+      const responseText = await responseClone.text();
+      if (responseText) {
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {
+          errorMessage = responseText;
+        }
+      }
+    } catch {
+      // Ignore parsing errors
+    }
+    throw new Error(errorMessage);
   }
 
   const contentType = response.headers.get("content-type");

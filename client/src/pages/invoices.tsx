@@ -91,7 +91,7 @@ export default function InvoicesPage() {
             <p>No invoices found</p>
             <Link href="/invoices/new">
               <Button
-                variant="link"
+                variant="ghost"
                 className="mt-2"
                 data-testid="button-create-first-invoice"
               >

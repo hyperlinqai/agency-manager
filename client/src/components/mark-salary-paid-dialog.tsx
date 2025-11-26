@@ -59,7 +59,7 @@ export function MarkSalaryPaidDialog({ salary, open, onClose }: MarkSalaryPaidDi
 
   const markPaidMutation = useMutation({
     mutationFn: async (data: MarkPaidForm) => {
-      return apiRequest(`/api/salaries/${salary.id}/mark-paid`, "POST", data);
+      return apiRequest("POST", `/api/salaries/${salary.id}/mark-paid`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/salaries"] });
@@ -85,7 +85,7 @@ export function MarkSalaryPaidDialog({ salary, open, onClose }: MarkSalaryPaidDi
         <div className="mb-4 p-4 bg-muted rounded-lg">
           <div className="text-sm text-muted-foreground">Amount to pay</div>
           <div className="text-2xl font-semibold mt-1" data-testid="salary-amount">
-            {formatCurrency(Number(salary.amount), salary.currency)}
+            {formatCurrency(Number(salary.amount))}
           </div>
           <div className="text-sm text-muted-foreground mt-2">
             For month: {salary.month}

@@ -85,7 +85,7 @@ export function VendorDialog({ vendor, open, onClose }: VendorDialogProps) {
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertVendor) => {
-      return apiRequest("/api/vendors", "POST", data);
+      return apiRequest("POST", "/api/vendors", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vendors"] });
@@ -99,7 +99,7 @@ export function VendorDialog({ vendor, open, onClose }: VendorDialogProps) {
 
   const updateMutation = useMutation({
     mutationFn: async (data: InsertVendor) => {
-      return apiRequest(`/api/vendors/${vendor?.id}`, "PUT", data);
+      return apiRequest("PUT", `/api/vendors/${vendor?.id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vendors"] });

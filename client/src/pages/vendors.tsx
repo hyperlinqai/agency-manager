@@ -28,7 +28,7 @@ export default function VendorsPage() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      return apiRequest(`/api/vendors/${id}/status`, "PUT", { status });
+      return apiRequest("PUT", `/api/vendors/${id}/status`, { status });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vendors"] });

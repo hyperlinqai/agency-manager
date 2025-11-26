@@ -88,8 +88,8 @@ export default function ClientsPage() {
         ) : filteredClients.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <p>No clients found</p>
-            <Button
-              variant="link"
+              <Button
+              variant="ghost"
               onClick={() => setIsDialogOpen(true)}
               className="mt-2"
               data-testid="button-add-first-client"
@@ -121,10 +121,10 @@ export default function ClientsPage() {
                   <TableCell data-testid={`text-email-${client.id}`}>{client.email}</TableCell>
                   <TableCell data-testid={`text-phone-${client.id}`}>{client.phone}</TableCell>
                   <TableCell className="text-right font-mono" data-testid={`text-invoiced-${client.id}`}>
-                    {formatCurrency(client.totalInvoiced)}
+                    {formatCurrency(client.totalInvoiced || 0)}
                   </TableCell>
                   <TableCell className="text-right font-mono" data-testid={`text-outstanding-${client.id}`}>
-                    {formatCurrency(client.outstandingAmount)}
+                    {formatCurrency(client.outstandingAmount || 0)}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={client.status} type="client" />

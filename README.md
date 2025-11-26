@@ -29,7 +29,7 @@ A production-ready internal web application for digital marketing agencies to ma
 - **Styling**: Tailwind CSS + shadcn/ui components
 - **State**: TanStack Query (React Query)
 - **Auth**: JWT with bcrypt password hashing
-- **Storage**: In-memory storage (easily replaceable with database)
+- **Database**: MongoDB
 
 ## Getting Started
 
@@ -39,13 +39,14 @@ A production-ready internal web application for digital marketing agencies to ma
 
 ### Installation
 
-The project is pre-configured and ready to run on Replit. Simply click the "Run" button or execute:
+To run locally, install dependencies and start the development server:
 
 ```bash
+npm install
 npm run dev
 ```
 
-The application will start on `http://localhost:5000`
+When running locally the application will start on `http://localhost:5000` (or the port set in `PORT`).
 
 ### Default Login Credentials
 
@@ -138,6 +139,7 @@ This starts both the frontend (Vite) and backend (Express) on port 5000.
 
 ### Environment Variables
 
+- `DATABASE_URL`: MongoDB connection string (default: `mongodb://localhost:27017/mycrm`)
 - `SESSION_SECRET`: Secret key for JWT signing (auto-generated in development)
 - `PORT`: Server port (default: 5000)
 

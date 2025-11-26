@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { ToWords } from "to-words";
 import {
   insertClientSchema,
   insertProjectSchema,
@@ -14,6 +15,7 @@ import {
   insertTeamMemberSchema,
   insertSalaryPaymentSchema,
   insertCompanyProfileSchema,
+  insertJobRoleSchema,
 } from "@shared/schema";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "development-secret-key";
@@ -24,12 +26,16 @@ function authenticateToken(req: any, res: any, next: any) {
   const token = authHeader && authHeader.split(" ")[1];
 
   if (!token) {
-    return res.status(401).send("Authentication required");
+    return res.status(401).json({ error: "Authentication required", message: "No token provided" });
   }
 
   jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
     if (err) {
-      return res.status(403).send("Invalid token");
+      console.error("JWT verification error:", err.message);
+      return res.status(403).json({ 
+        error: "Invalid token", 
+        message: err.message === "jwt expired" ? "Token has expired. Please login again." : "Invalid or malformed token" 
+      });
     }
     req.user = user;
     next();
@@ -250,6 +256,130 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(invoice);
     } catch (error: any) {
       res.status(400).send(error.message);
+    }
+  });
+
+  // ============================================
+  // INVOICE VIEW (Server-Side Rendered HTML)
+  // ============================================
+  app.get("/invoice/:id/view", async (req, res) => {
+    try {
+      // Fetch invoice with line items
+      const invoice = await storage.getInvoiceById(req.params.id);
+      if (!invoice) {
+        return res.status(404).send("Invoice not found");
+      }
+
+      // Fetch client
+      const client = await storage.getClientById(invoice.clientId);
+      
+      // Fetch company profile
+      const companyProfile = await storage.getCompanyProfile();
+
+      // Format currency for INR with proper Indian formatting
+      const formatCurrency = (amount: number): string => {
+        return new Intl.NumberFormat("en-IN", {
+          style: "currency",
+          currency: invoice.currency || "INR",
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(amount);
+      };
+
+      // Format date
+      const formatDate = (date: Date | string): string => {
+        const d = new Date(date);
+        return d.toLocaleDateString("en-IN", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+      };
+
+      // Convert amount to words
+      const toWords = new ToWords({
+        localeCode: "en-IN",
+        converterOptions: {
+          currency: true,
+          ignoreDecimal: false,
+          ignoreZeroCurrency: false,
+          doNotAddOnly: false,
+          currencyOptions: {
+            name: "Rupee",
+            plural: "Rupees",
+            symbol: "₹",
+            fractionalUnit: {
+              name: "Paisa",
+              plural: "Paise",
+              symbol: "",
+            },
+          },
+        },
+      });
+
+      // Calculate tax rate
+      const taxRate = invoice.subtotal > 0 
+        ? ((invoice.taxAmount / invoice.subtotal) * 100).toFixed(0)
+        : "0";
+
+      // Build the data object for EJS template
+      const templateData = {
+        company: {
+          name: companyProfile?.companyName || "Hyperlinq Technology",
+          tagline: "Invoice Service",
+          phone: companyProfile?.phone || "+91 98765 43210",
+          email: companyProfile?.email || "contact@hyperlinq.tech",
+          logoUrl: companyProfile?.logoUrl || null,
+        },
+        invoice: {
+          number: invoice.invoiceNumber,
+          date: formatDate(invoice.issueDate),
+          dueDate: formatDate(invoice.dueDate),
+          status: invoice.status,
+        },
+        client: {
+          name: client?.name || invoice.clientName || "Client",
+          email: client?.email || "",
+          address: client 
+            ? [client.address, client.city, client.state, client.pincode].filter(Boolean).join(", ")
+            : "",
+          website: client?.companyWebsite || "",
+        },
+        payment: {
+          method: "Bank Transfer",
+          beneficiaryName: companyProfile?.companyName || "Hyperlinq Technology",
+          accountNumber: companyProfile?.bankAccountNumber || "",
+          ifscCode: companyProfile?.bankIfscCode || "",
+          bankName: companyProfile?.bankName || "",
+        },
+        items: (invoice.lineItems || []).map((item: any) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: formatCurrency(item.unitPrice),
+          amount: formatCurrency(item.lineTotal),
+        })),
+        totals: {
+          subtotal: formatCurrency(invoice.subtotal),
+          tax: formatCurrency(invoice.taxAmount),
+          taxRate: taxRate,
+          grandTotal: formatCurrency(invoice.totalAmount),
+          amountInWords: toWords.convert(invoice.totalAmount),
+        },
+        notes: invoice.notes || "",
+        terms: companyProfile?.invoiceTerms || "",
+        footer: {
+          showQr: true,
+          qrCodeUrl: null, // Can be set to a UPI QR code URL
+          signatoryName: companyProfile?.authorizedSignatoryName || "Authorized Signatory",
+          signatoryTitle: companyProfile?.authorizedSignatoryTitle || "Director",
+          signDate: formatDate(invoice.issueDate),
+        },
+      };
+
+      res.render("invoice", templateData);
+    } catch (error: any) {
+      console.error("Error rendering invoice:", error);
+      res.status(500).send("Error rendering invoice: " + error.message);
     }
   });
 
@@ -598,6 +728,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================
+  // JOB ROLE ROUTES
+  // ============================================
+  app.get("/api/job-roles", authenticateToken, async (req, res) => {
+    try {
+      const { status } = req.query;
+      const roles = await storage.getJobRoles({
+        status: status as string,
+      });
+      res.json(roles);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/job-roles/:id", authenticateToken, async (req, res) => {
+    try {
+      const role = await storage.getJobRoleById(req.params.id);
+      if (!role) {
+        return res.status(404).send("Job role not found");
+      }
+      res.json(role);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/job-roles", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertJobRoleSchema.parse(req.body);
+      const role = await storage.createJobRole(validatedData);
+      res.json(role);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.put("/api/job-roles/:id", authenticateToken, async (req, res) => {
+    try {
+      const validatedData = insertJobRoleSchema.partial().parse(req.body);
+      const role = await storage.updateJobRole(req.params.id, validatedData);
+      res.json(role);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  // Seed default job roles endpoint
+  app.post("/api/job-roles/seed-defaults", authenticateToken, async (req, res) => {
+    try {
+      await storage.seedDefaultJobRoles();
+      const roles = await storage.getJobRoles({});
+      res.json({ message: "Default job roles seeded successfully", count: roles.length });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // ============================================
   // SALARY PAYMENT ROUTES
   // ============================================
   app.get("/api/salaries", authenticateToken, async (req, res) => {
@@ -669,10 +857,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/settings/company", authenticateToken, async (req, res) => {
     try {
       const profile = await storage.getCompanyProfile();
-      if (!profile) {
-        return res.status(404).send("Company profile not found");
-      }
-      res.json(profile);
+      // Return null/empty object if no profile exists yet (not an error condition)
+      res.json(profile || null);
     } catch (error: any) {
       res.status(500).send(error.message);
     }
@@ -696,6 +882,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       res.status(400).send(error.message);
     }
+  });
+
+  // Seed default job roles on startup
+  storage.seedDefaultJobRoles().catch(err => {
+    console.error("Error seeding default job roles:", err);
   });
 
   const httpServer = createServer(app);

@@ -39,6 +39,10 @@ export default function ClientDetailPage() {
   const { data: client, isLoading: clientLoading } = useQuery<Client>({
     queryKey: ["/api/clients", clientId],
     enabled: !!clientId,
+    queryFn: async () => {
+      if (!clientId) return null;
+      return apiRequest("GET", `/api/clients/${clientId}`);
+    },
   });
 
   const { data: projects, isLoading: projectsLoading } = useQuery<Project[]>({

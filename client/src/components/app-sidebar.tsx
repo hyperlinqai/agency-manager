@@ -8,7 +8,6 @@ import {
   Settings,
   BookOpen,
   Globe,
-  Archive,
 } from "lucide-react";
 import {
   Sidebar,
@@ -59,12 +58,14 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center">
-            <Archive className="h-5 w-5 text-primary-foreground" />
-          </div>
+          <img 
+            src="/logo.svg" 
+            alt="Hyperlinq Technology" 
+            className="h-10 w-10 rounded-full object-contain"
+          />
           <div className="flex flex-col">
-            <span className="text-sm font-semibold text-sidebar-foreground">Agency Control</span>
-            <span className="text-xs text-muted-foreground">Center</span>
+            <span className="text-sm font-semibold text-sidebar-foreground">Hyperlinq</span>
+            <span className="text-xs text-muted-foreground">Technology</span>
           </div>
         </div>
       </SidebarHeader>

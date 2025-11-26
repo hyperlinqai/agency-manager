@@ -91,7 +91,7 @@ export function SalaryPaymentDialog({ salary, open, onClose }: SalaryPaymentDial
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertSalaryPayment) => {
-      return apiRequest("/api/salaries", "POST", data);
+      return apiRequest("POST", "/api/salaries", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/salaries"] });
@@ -105,7 +105,7 @@ export function SalaryPaymentDialog({ salary, open, onClose }: SalaryPaymentDial
 
   const updateMutation = useMutation({
     mutationFn: async (data: InsertSalaryPayment) => {
-      return apiRequest(`/api/salaries/${salary?.id}`, "PUT", data);
+      return apiRequest("PUT", `/api/salaries/${salary?.id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/salaries"] });

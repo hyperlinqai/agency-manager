@@ -1,19 +1,6 @@
-// Using Drizzle ORM for database operations - blueprint:javascript_database
-import { db } from "./db";
+// Using MongoDB for database operations
+import { getDb } from "./db";
 import {
-  users,
-  clients,
-  projects,
-  invoices,
-  invoiceLineItems,
-  payments,
-  services,
-  vendors,
-  expenseCategories,
-  expenses,
-  teamMembers,
-  salaryPayments,
-  companyProfiles,
   type User,
   type Client,
   type Project,
@@ -27,6 +14,7 @@ import {
   type TeamMember,
   type SalaryPayment,
   type CompanyProfile,
+  type JobRole,
   type InsertClient,
   type InsertProject,
   type InsertPayment,
@@ -37,6 +25,7 @@ import {
   type InsertTeamMember,
   type InsertSalaryPayment,
   type InsertCompanyProfile,
+  type InsertJobRole,
   type ClientWithStats,
   type InvoiceWithRelations,
   type VendorWithStats,
@@ -44,13 +33,24 @@ import {
   type DashboardSummary,
   type FinancialSummary,
 } from "@shared/schema";
-import { eq, and, gte, lte, sql, desc, ilike, or, isNull} from "drizzle-orm";
 import { nanoid } from "nanoid";
 
-// Helper to convert Drizzle decimal strings to numbers
-const toNumber = (value: string | null | undefined): number => {
-  if (!value) return 0;
-  return parseFloat(value);
+// Helper to convert MongoDB document to schema format (removes _id, keeps id)
+const toSchema = <T extends { _id?: any; id?: string }>(doc: any): T => {
+  if (!doc) return doc;
+  const { _id, ...rest } = doc;
+  // Keep the id field if it exists, otherwise use _id as id
+  return {
+    ...rest,
+    id: doc.id || (_id ? _id.toString() : nanoid()),
+  } as T;
+};
+
+// Helper to convert schema format to MongoDB document (keeps id field, MongoDB will add _id)
+const toMongo = (doc: any): any => {
+  if (!doc) return doc;
+  // Keep id field as-is, MongoDB will add _id automatically
+  return doc;
 };
 
 export interface IStorage {
@@ -140,6 +140,13 @@ export interface IStorage {
   updateExpense(id: string, expense: Partial<InsertExpense>): Promise<Expense>;
   markExpensePaid(id: string, data: { paymentDate: Date; paymentMethod: string; reference: string }): Promise<Expense>;
   
+  // Job Role methods
+  getJobRoles(filters?: { status?: string }): Promise<JobRole[]>;
+  getJobRoleById(id: string): Promise<JobRole | undefined>;
+  createJobRole(role: InsertJobRole): Promise<JobRole>;
+  updateJobRole(id: string, role: Partial<InsertJobRole>): Promise<JobRole>;
+  seedDefaultJobRoles(): Promise<void>;
+  
   // Team Member methods
   getTeamMembers(filters?: { status?: string }): Promise<TeamMember[]>;
   getTeamMemberById(id: string): Promise<TeamMember | undefined>;
@@ -168,69 +175,65 @@ export class DatabaseStorage implements IStorage {
   
   // User methods
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
-    return user || undefined;
+    const db = await getDb();
+    const user = await db.collection("users").findOne({ email });
+    return user ? toSchema<User>(user) : undefined;
   }
 
   async createUser(user: { name: string; email: string; passwordHash: string; role: string }): Promise<User> {
-    const [newUser] = await db
-      .insert(users)
-      .values({
-        id: nanoid(),
-        name: user.name,
-        email: user.email,
-        passwordHash: user.passwordHash,
-        role: user.role as any,
-      })
-      .returning();
-    return newUser;
+    const db = await getDb();
+    const newUser = {
+      id: nanoid(),
+      name: user.name,
+      email: user.email,
+      passwordHash: user.passwordHash,
+      role: user.role,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("users").insertOne(toMongo(newUser));
+    return toSchema<User>(newUser);
   }
 
   // Client methods
   async getClients(filters?: { status?: string; search?: string }): Promise<ClientWithStats[]> {
-    const conditions = [];
+    const db = await getDb();
+    const query: any = {};
     
     if (filters?.status) {
-      conditions.push(eq(clients.status, filters.status as any));
+      query.status = filters.status;
     }
     
     if (filters?.search) {
-      const searchPattern = `%${filters.search}%`;
-      conditions.push(
-        or(
-          ilike(clients.name, searchPattern),
-          ilike(clients.email, searchPattern),
-          ilike(clients.contactName, searchPattern)
-        )!
-      );
+      query.$or = [
+        { name: { $regex: filters.search, $options: "i" } },
+        { email: { $regex: filters.search, $options: "i" } },
+        { contactName: { $regex: filters.search, $options: "i" } },
+      ];
     }
 
-    const clientList = await db
-      .select()
-      .from(clients)
-      .where(conditions.length > 0 ? and(...conditions) : undefined);
+    const clientList = await db.collection("clients").find(query).toArray();
+    const clients = clientList.map(toSchema<Client>);
 
     // Add stats for each client
     const clientsWithStats: ClientWithStats[] = await Promise.all(
-      clientList.map(async (client) => {
-        const clientInvoices = await db
-          .select()
-          .from(invoices)
-          .where(eq(invoices.clientId, client.id));
+      clients.map(async (client: Client) => {
+        const clientInvoices = await db.collection("invoices")
+          .find({ clientId: client.id })
+          .toArray();
 
         const totalInvoiced = clientInvoices.reduce(
-          (sum, inv) => sum + toNumber(inv.totalAmount),
+          (sum: number, inv: any) => sum + (inv.totalAmount || 0),
           0
         );
         const outstandingAmount = clientInvoices.reduce(
-          (sum, inv) => sum + toNumber(inv.balanceDue),
+          (sum: number, inv: any) => sum + (inv.balanceDue || 0),
           0
         );
 
-        const clientProjects = await db
-          .select()
-          .from(projects)
-          .where(eq(projects.clientId, client.id));
+        const clientProjects = await db.collection("projects")
+          .find({ clientId: client.id })
+          .toArray();
 
         return {
           ...client,
@@ -245,86 +248,93 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getClientById(id: string): Promise<Client | undefined> {
-    const [client] = await db.select().from(clients).where(eq(clients.id, id));
-    return client || undefined;
+    const db = await getDb();
+    const client = await db.collection("clients").findOne({ id });
+    return client ? toSchema<Client>(client) : undefined;
   }
 
   async createClient(client: InsertClient): Promise<Client> {
-    const [newClient] = await db
-      .insert(clients)
-      .values({
-        id: nanoid(),
-        ...client,
-      })
-      .returning();
-    return newClient;
+    const db = await getDb();
+    const newClient = {
+      id: nanoid(),
+      ...client,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("clients").insertOne(toMongo(newClient));
+    return toSchema<Client>(newClient);
   }
 
   async updateClient(id: string, client: Partial<InsertClient>): Promise<Client> {
-    const [updated] = await db
-      .update(clients)
-      .set({ ...client, updatedAt: new Date() })
-      .where(eq(clients.id, id))
-      .returning();
-    if (!updated) throw new Error("Client not found");
-    return updated;
+    const db = await getDb();
+    const result = await db.collection("clients").findOneAndUpdate(
+      { id },
+      { $set: { ...client, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+    if (!result) throw new Error("Client not found");
+    return toSchema<Client>(result);
   }
 
   async updateClientStatus(id: string, status: string): Promise<Client> {
-    const [updated] = await db
-      .update(clients)
-      .set({ status: status as any, updatedAt: new Date() })
-      .where(eq(clients.id, id))
-      .returning();
-    if (!updated) throw new Error("Client not found");
-    return updated;
+    const db = await getDb();
+    const result = await db.collection("clients").findOneAndUpdate(
+      { id },
+      { $set: { status, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+    if (!result) throw new Error("Client not found");
+    return toSchema<Client>(result);
   }
 
   // Project methods
   async getProjects(filters?: { clientId?: string }): Promise<Project[]> {
+    const db = await getDb();
+    const query: any = {};
     if (filters?.clientId) {
-      return await db
-        .select()
-        .from(projects)
-        .where(eq(projects.clientId, filters.clientId));
+      query.clientId = filters.clientId;
     }
-    return await db.select().from(projects);
+    const projects = await db.collection("projects").find(query).toArray();
+    return projects.map(toSchema<Project>);
   }
 
   async getProjectById(id: string): Promise<Project | undefined> {
-    const [project] = await db.select().from(projects).where(eq(projects.id, id));
-    return project || undefined;
+    const db = await getDb();
+    const project = await db.collection("projects").findOne({ id });
+    return project ? toSchema<Project>(project) : undefined;
   }
 
   async createProject(project: InsertProject): Promise<Project> {
-    const [newProject] = await db
-      .insert(projects)
-      .values({
-        id: nanoid(),
-        ...project,
-        startDate: new Date(project.startDate),
-        endDate: project.endDate ? new Date(project.endDate) : null,
-      })
-      .returning();
-    return newProject;
+    const db = await getDb();
+    const newProject = {
+      id: nanoid(),
+      ...project,
+      startDate: new Date(project.startDate),
+      endDate: project.endDate ? new Date(project.endDate) : null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("projects").insertOne(toMongo(newProject));
+    return toSchema<Project>(newProject);
   }
 
   async updateProject(id: string, project: Partial<InsertProject>): Promise<Project> {
+    const db = await getDb();
     const updateData: any = { ...project, updatedAt: new Date() };
     if (project.startDate) {
       updateData.startDate = new Date(project.startDate);
     }
-    if (project.endDate) {
-      updateData.endDate = new Date(project.endDate);
+    if (project.endDate !== undefined) {
+      updateData.endDate = project.endDate ? new Date(project.endDate) : null;
     }
     
-    const [updated] = await db
-      .update(projects)
-      .set(updateData)
-      .where(eq(projects.id, id))
-      .returning();
-    if (!updated) throw new Error("Project not found");
-    return updated;
+    const result = await db.collection("projects").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
+    if (!result) throw new Error("Project not found");
+    return toSchema<Project>(result);
   }
 
   // Invoice methods
@@ -333,73 +343,54 @@ export class DatabaseStorage implements IStorage {
     status?: string; 
     search?: string 
   }): Promise<InvoiceWithRelations[]> {
-    const conditions = [];
+    const db = await getDb();
+    const query: any = {};
     
     if (filters?.clientId) {
-      conditions.push(eq(invoices.clientId, filters.clientId));
+      query.clientId = filters.clientId;
     }
     
     if (filters?.status) {
-      conditions.push(eq(invoices.status, filters.status as any));
+      query.status = filters.status;
     }
     
     if (filters?.search) {
-      const searchPattern = `%${filters.search}%`;
-      conditions.push(ilike(invoices.invoiceNumber, searchPattern));
+      query.invoiceNumber = { $regex: filters.search, $options: "i" };
     }
 
-    const invoiceList = await db
-      .select()
-      .from(invoices)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(invoices.createdAt));
+    const invoiceList = await db.collection("invoices")
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
 
     // Add relations
     const invoicesWithRelations: InvoiceWithRelations[] = await Promise.all(
-      invoiceList.map(async (invoice) => {
-        const [client] = await db
-          .select()
-          .from(clients)
-          .where(eq(clients.id, invoice.clientId));
+      invoiceList.map(async (invoice: any) => {
+        const inv = toSchema<Invoice>(invoice);
+        const client = await db.collection("clients").findOne({ id: inv.clientId });
+        const clientData = client ? toSchema<Client>(client) : null;
 
         let project = null;
-        if (invoice.projectId) {
-          [project] = await db
-            .select()
-            .from(projects)
-            .where(eq(projects.id, invoice.projectId));
+        if (inv.projectId) {
+          const projectDoc = await db.collection("projects").findOne({ id: inv.projectId });
+          project = projectDoc ? toSchema<Project>(projectDoc) : null;
         }
 
-        const lineItemsList = await db
-          .select()
-          .from(invoiceLineItems)
-          .where(eq(invoiceLineItems.invoiceId, invoice.id));
+        const lineItemsList = await db.collection("invoiceLineItems")
+          .find({ invoiceId: inv.id })
+          .toArray();
 
-        const paymentsList = await db
-          .select()
-          .from(payments)
-          .where(eq(payments.invoiceId, invoice.id));
+        const paymentsList = await db.collection("payments")
+          .find({ invoiceId: inv.id })
+          .toArray();
 
         return {
-          ...invoice,
-          subtotal: toNumber(invoice.subtotal),
-          taxAmount: toNumber(invoice.taxAmount),
-          totalAmount: toNumber(invoice.totalAmount),
-          amountPaid: toNumber(invoice.amountPaid),
-          balanceDue: toNumber(invoice.balanceDue),
-          clientName: client?.name || "",
-          projectName: project?.name || null,
-          projectScope: project?.scope || null,
-          lineItems: lineItemsList.map((item) => ({
-            ...item,
-            quantity: toNumber(item.quantity),
-            unitPrice: toNumber(item.unitPrice),
-            lineTotal: toNumber(item.lineTotal),
-          })),
-          payments: paymentsList.map((payment) => ({
-            ...payment,
-            amount: toNumber(payment.amount),
-          })),
+          ...inv,
+          clientName: clientData?.name || "",
+          projectName: project?.name || undefined,
+          projectScope: project?.scope || undefined,
+          lineItems: lineItemsList.map((item: any) => toSchema<InvoiceLineItem>(item)),
+          payments: paymentsList.map((payment: any) => toSchema<Payment>(payment)),
         };
       })
     );
@@ -408,52 +399,35 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getInvoiceById(id: string): Promise<InvoiceWithRelations | undefined> {
-    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
+    const db = await getDb();
+    const invoice = await db.collection("invoices").findOne({ id });
     if (!invoice) return undefined;
 
-    const [client] = await db
-      .select()
-      .from(clients)
-      .where(eq(clients.id, invoice.clientId));
+    const inv = toSchema<Invoice>(invoice);
+    const client = await db.collection("clients").findOne({ id: inv.clientId });
+    const clientData = client ? toSchema<Client>(client) : null;
 
     let project = null;
-    if (invoice.projectId) {
-      [project] = await db
-        .select()
-        .from(projects)
-        .where(eq(projects.id, invoice.projectId));
+    if (inv.projectId) {
+      const projectDoc = await db.collection("projects").findOne({ id: inv.projectId });
+      project = projectDoc ? toSchema<Project>(projectDoc) : null;
     }
 
-    const lineItemsList = await db
-      .select()
-      .from(invoiceLineItems)
-      .where(eq(invoiceLineItems.invoiceId, invoice.id));
+    const lineItemsList = await db.collection("invoiceLineItems")
+      .find({ invoiceId: inv.id })
+      .toArray();
 
-    const paymentsList = await db
-      .select()
-      .from(payments)
-      .where(eq(payments.invoiceId, invoice.id));
+    const paymentsList = await db.collection("payments")
+      .find({ invoiceId: inv.id })
+      .toArray();
 
     return {
-      ...invoice,
-      subtotal: toNumber(invoice.subtotal),
-      taxAmount: toNumber(invoice.taxAmount),
-      totalAmount: toNumber(invoice.totalAmount),
-      amountPaid: toNumber(invoice.amountPaid),
-      balanceDue: toNumber(invoice.balanceDue),
-      clientName: client?.name || "",
-      projectName: project?.name || null,
-      projectScope: project?.scope || null,
-      lineItems: lineItemsList.map((item) => ({
-        ...item,
-        quantity: toNumber(item.quantity),
-        unitPrice: toNumber(item.unitPrice),
-        lineTotal: toNumber(item.lineTotal),
-      })),
-      payments: paymentsList.map((payment) => ({
-        ...payment,
-        amount: toNumber(payment.amount),
-      })),
+      ...inv,
+      clientName: clientData?.name || "",
+      projectName: project?.name || undefined,
+      projectScope: project?.scope || undefined,
+          lineItems: lineItemsList.map((item: any) => toSchema<InvoiceLineItem>(item)),
+          payments: paymentsList.map((payment: any) => toSchema<Payment>(payment)),
     };
   }
 
@@ -476,153 +450,114 @@ export class DatabaseStorage implements IStorage {
       lineTotal: number;
     }>;
   }): Promise<Invoice> {
+    const db = await getDb();
     const invoiceNumber = invoice.invoiceNumber || `INV-${String(this.invoiceCounter++).padStart(4, "0")}`;
     const balanceDue = invoice.totalAmount;
 
-    const [newInvoice] = await db
-      .insert(invoices)
-      .values({
-        id: nanoid(),
-        clientId: invoice.clientId,
-        projectId: invoice.projectId,
-        invoiceNumber,
-        issueDate: new Date(invoice.issueDate),
-        dueDate: new Date(invoice.dueDate),
-        currency: invoice.currency,
-        subtotal: invoice.subtotal.toString(),
-        taxAmount: invoice.taxAmount.toString(),
-        totalAmount: invoice.totalAmount.toString(),
-        amountPaid: "0",
-        balanceDue: balanceDue.toString(),
-        status: invoice.status as any,
-        notes: invoice.notes,
-      })
-      .returning();
+    const newInvoice = {
+      id: nanoid(),
+      clientId: invoice.clientId,
+      projectId: invoice.projectId,
+      invoiceNumber,
+      issueDate: new Date(invoice.issueDate),
+      dueDate: new Date(invoice.dueDate),
+      currency: invoice.currency,
+      subtotal: invoice.subtotal,
+      taxAmount: invoice.taxAmount,
+      totalAmount: invoice.totalAmount,
+      amountPaid: 0,
+      balanceDue: balanceDue,
+      status: invoice.status,
+      notes: invoice.notes,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("invoices").insertOne(toMongo(newInvoice));
 
     // Insert line items
     if (invoice.lineItems.length > 0) {
-      await db.insert(invoiceLineItems).values(
-        invoice.lineItems.map((item) => ({
-          id: nanoid(),
-          invoiceId: newInvoice.id,
-          description: item.description,
-          quantity: item.quantity.toString(),
-          unitPrice: item.unitPrice.toString(),
-          lineTotal: item.lineTotal.toString(),
-        }))
-      );
+      const lineItems = invoice.lineItems.map((item) => ({
+        id: nanoid(),
+        invoiceId: newInvoice.id,
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        lineTotal: item.lineTotal,
+      }));
+      await db.collection("invoiceLineItems").insertMany(lineItems.map(toMongo));
     }
 
-    return {
-      ...newInvoice,
-      subtotal: toNumber(newInvoice.subtotal),
-      taxAmount: toNumber(newInvoice.taxAmount),
-      totalAmount: toNumber(newInvoice.totalAmount),
-      amountPaid: toNumber(newInvoice.amountPaid),
-      balanceDue: toNumber(newInvoice.balanceDue),
-    };
+    return toSchema<Invoice>(newInvoice);
   }
 
   async updateInvoice(id: string, invoice: Partial<Invoice>): Promise<Invoice> {
+    const db = await getDb();
     const updateData: any = { ...invoice, updatedAt: new Date() };
-    
-    // Convert numbers to strings for decimal fields
-    if (invoice.subtotal !== undefined) updateData.subtotal = invoice.subtotal.toString();
-    if (invoice.taxAmount !== undefined) updateData.taxAmount = invoice.taxAmount.toString();
-    if (invoice.totalAmount !== undefined) updateData.totalAmount = invoice.totalAmount.toString();
-    if (invoice.amountPaid !== undefined) updateData.amountPaid = invoice.amountPaid.toString();
-    if (invoice.balanceDue !== undefined) updateData.balanceDue = invoice.balanceDue.toString();
     if (invoice.issueDate) updateData.issueDate = new Date(invoice.issueDate);
     if (invoice.dueDate) updateData.dueDate = new Date(invoice.dueDate);
 
-    const [updated] = await db
-      .update(invoices)
-      .set(updateData)
-      .where(eq(invoices.id, id))
-      .returning();
+    const result = await db.collection("invoices").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
     
-    if (!updated) throw new Error("Invoice not found");
-    
-    return {
-      ...updated,
-      subtotal: toNumber(updated.subtotal),
-      taxAmount: toNumber(updated.taxAmount),
-      totalAmount: toNumber(updated.totalAmount),
-      amountPaid: toNumber(updated.amountPaid),
-      balanceDue: toNumber(updated.balanceDue),
-    };
+    if (!result) throw new Error("Invoice not found");
+    return toSchema<Invoice>(result);
   }
 
   async updateInvoiceStatus(id: string, status: string): Promise<Invoice> {
-    const [updated] = await db
-      .update(invoices)
-      .set({ status: status as any, updatedAt: new Date() })
-      .where(eq(invoices.id, id))
-      .returning();
+    const db = await getDb();
+    const result = await db.collection("invoices").findOneAndUpdate(
+      { id },
+      { $set: { status, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
     
-    if (!updated) throw new Error("Invoice not found");
-    
-    return {
-      ...updated,
-      subtotal: toNumber(updated.subtotal),
-      taxAmount: toNumber(updated.taxAmount),
-      totalAmount: toNumber(updated.totalAmount),
-      amountPaid: toNumber(updated.amountPaid),
-      balanceDue: toNumber(updated.balanceDue),
-    };
+    if (!result) throw new Error("Invoice not found");
+    return toSchema<Invoice>(result);
   }
 
   // Invoice Line Item methods
   async getLineItemsByInvoiceId(invoiceId: string): Promise<InvoiceLineItem[]> {
-    const items = await db
-      .select()
-      .from(invoiceLineItems)
-      .where(eq(invoiceLineItems.invoiceId, invoiceId));
+    const db = await getDb();
+    const items = await db.collection("invoiceLineItems")
+      .find({ invoiceId })
+      .toArray();
     
-    return items.map((item) => ({
-      ...item,
-      quantity: toNumber(item.quantity),
-      unitPrice: toNumber(item.unitPrice),
-      lineTotal: toNumber(item.lineTotal),
-    }));
+    return items.map(toSchema<InvoiceLineItem>);
   }
 
   // Payment methods
   async getPaymentsByInvoiceId(invoiceId: string): Promise<Payment[]> {
-    const paymentsList = await db
-      .select()
-      .from(payments)
-      .where(eq(payments.invoiceId, invoiceId));
+    const db = await getDb();
+    const paymentsList = await db.collection("payments")
+      .find({ invoiceId })
+      .toArray();
     
-    return paymentsList.map((payment) => ({
-      ...payment,
-      amount: toNumber(payment.amount),
-    }));
+    return paymentsList.map(toSchema<Payment>);
   }
 
   async createPayment(payment: InsertPayment): Promise<Payment> {
-    const [newPayment] = await db
-      .insert(payments)
-      .values({
-        id: nanoid(),
-        invoiceId: payment.invoiceId,
-        paymentDate: new Date(payment.paymentDate),
-        amount: payment.amount.toString(),
-        method: payment.method,
-        reference: payment.reference || "",
-        notes: payment.notes || "",
-      })
-      .returning();
+    const db = await getDb();
+    const newPayment = {
+      id: nanoid(),
+      invoiceId: payment.invoiceId,
+      paymentDate: new Date(payment.paymentDate),
+      amount: payment.amount,
+      method: payment.method,
+      reference: payment.reference || "",
+      notes: payment.notes || "",
+      createdAt: new Date(),
+    };
+    await db.collection("payments").insertOne(toMongo(newPayment));
 
     // Update invoice amount paid and balance
-    const [invoice] = await db
-      .select()
-      .from(invoices)
-      .where(eq(invoices.id, payment.invoiceId));
+    const invoice = await db.collection("invoices").findOne({ id: payment.invoiceId });
 
     if (invoice) {
-      const newAmountPaid = toNumber(invoice.amountPaid) + payment.amount;
-      const totalAmount = toNumber(invoice.totalAmount);
+      const newAmountPaid = (invoice.amountPaid || 0) + payment.amount;
+      const totalAmount = invoice.totalAmount || 0;
       const newBalanceDue = totalAmount - newAmountPaid;
 
       let newStatus = invoice.status;
@@ -638,134 +573,116 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      await db
-        .update(invoices)
-        .set({
-          amountPaid: newAmountPaid.toString(),
-          balanceDue: newBalanceDue.toString(),
-          status: newStatus as any,
-          updatedAt: new Date(),
-        })
-        .where(eq(invoices.id, payment.invoiceId));
+      await db.collection("invoices").updateOne(
+        { id: payment.invoiceId },
+        {
+          $set: {
+            amountPaid: newAmountPaid,
+            balanceDue: newBalanceDue,
+            status: newStatus,
+            updatedAt: new Date(),
+          },
+        }
+      );
     }
 
-    return {
-      ...newPayment,
-      amount: toNumber(newPayment.amount),
-    };
+    return toSchema<Payment>(newPayment);
   }
 
   // Service methods
   async getServices(filters?: { status?: string; category?: string }): Promise<Service[]> {
-    const conditions = [];
+    const db = await getDb();
+    const query: any = {};
     
     if (filters?.status) {
-      conditions.push(eq(services.status, filters.status as any));
+      query.status = filters.status;
     }
     
     if (filters?.category) {
-      conditions.push(eq(services.category, filters.category as any));
+      query.category = filters.category;
     }
     
-    const serviceList = await db
-      .select()
-      .from(services)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(services.createdAt));
+    const serviceList = await db.collection("services")
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
     
-    return serviceList.map(service => ({
-      ...service,
-      defaultPrice: toNumber(service.defaultPrice),
-    }));
+    return serviceList.map(toSchema<Service>);
   }
 
   async getServiceById(id: string): Promise<Service | undefined> {
-    const [service] = await db
-      .select()
-      .from(services)
-      .where(eq(services.id, id));
-    
-    if (!service) return undefined;
-    
-    return {
-      ...service,
-      defaultPrice: toNumber(service.defaultPrice),
-    };
+    const db = await getDb();
+    const service = await db.collection("services").findOne({ id });
+    return service ? toSchema<Service>(service) : undefined;
   }
 
   async createService(service: InsertService): Promise<Service> {
-    const [newService] = await db
-      .insert(services)
-      .values({
-        id: nanoid(),
-        name: service.name,
-        description: service.description || "",
-        category: service.category,
-        defaultPrice: service.defaultPrice.toString(),
-        currency: service.currency || "INR",
-        unit: service.unit || "Hour",
-        status: service.status || "ACTIVE",
-      })
-      .returning();
-    
-    return {
-      ...newService,
-      defaultPrice: toNumber(newService.defaultPrice),
+    const db = await getDb();
+    const newService = {
+      id: nanoid(),
+      name: service.name,
+      description: service.description || "",
+      category: service.category,
+      defaultPrice: service.defaultPrice,
+      currency: service.currency || "INR",
+      unit: service.unit || "Hour",
+      status: service.status || "ACTIVE",
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
+    await db.collection("services").insertOne(toMongo(newService));
+    return toSchema<Service>(newService);
   }
 
   async updateService(id: string, service: Partial<InsertService>): Promise<Service> {
-    const updateData: any = {
-      updatedAt: new Date(),
-    };
+    const db = await getDb();
+    const updateData: any = { updatedAt: new Date() };
     
     if (service.name !== undefined) updateData.name = service.name;
     if (service.description !== undefined) updateData.description = service.description;
     if (service.category !== undefined) updateData.category = service.category;
-    if (service.defaultPrice !== undefined) updateData.defaultPrice = service.defaultPrice.toString();
+    if (service.defaultPrice !== undefined) updateData.defaultPrice = service.defaultPrice;
     if (service.currency !== undefined) updateData.currency = service.currency;
     if (service.unit !== undefined) updateData.unit = service.unit;
     if (service.status !== undefined) updateData.status = service.status;
     
-    const [updatedService] = await db
-      .update(services)
-      .set(updateData)
-      .where(eq(services.id, id))
-      .returning();
+    const result = await db.collection("services").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
     
-    return {
-      ...updatedService,
-      defaultPrice: toNumber(updatedService.defaultPrice),
-    };
+    if (!result) throw new Error("Service not found");
+    return toSchema<Service>(result);
   }
 
   async updateServiceStatus(id: string, status: string): Promise<Service> {
-    const [updatedService] = await db
-      .update(services)
-      .set({ status: status as any, updatedAt: new Date() })
-      .where(eq(services.id, id))
-      .returning();
+    const db = await getDb();
+    const result = await db.collection("services").findOneAndUpdate(
+      { id },
+      { $set: { status, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
     
-    return {
-      ...updatedService,
-      defaultPrice: toNumber(updatedService.defaultPrice),
-    };
+    if (!result) throw new Error("Service not found");
+    return toSchema<Service>(result);
   }
 
   // Dashboard methods
   async getDashboardSummary(): Promise<DashboardSummary> {
-    const allInvoices = await db.select().from(invoices);
+    const db = await getDb();
+    const allInvoices = await db.collection("invoices").find({}).toArray();
     
     const totalInvoiced = allInvoices.reduce(
-      (sum, inv) => sum + toNumber(inv.totalAmount),
+      (sum: number, inv: any) => sum + (inv.totalAmount || 0),
       0
     );
     const totalPaid = allInvoices.reduce(
-      (sum, inv) => sum + toNumber(inv.amountPaid),
+      (sum: number, inv: any) => sum + (inv.amountPaid || 0),
       0
     );
     const totalOutstanding = allInvoices.reduce(
-      (sum, inv) => sum + toNumber(inv.balanceDue),
+      (sum: number, inv: any) => sum + (inv.balanceDue || 0),
       0
     );
 
@@ -774,36 +691,34 @@ export class DatabaseStorage implements IStorage {
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
     const thisMonthInvoices = allInvoices.filter(
-      (inv) => new Date(inv.createdAt) >= startOfMonth && new Date(inv.createdAt) <= endOfMonth
+      (inv: any) => new Date(inv.createdAt) >= startOfMonth && new Date(inv.createdAt) <= endOfMonth
     );
 
     const thisMonthInvoiced = thisMonthInvoices.reduce(
-      (sum, inv) => sum + toNumber(inv.totalAmount),
+      (sum: number, inv: any) => sum + (inv.totalAmount || 0),
       0
     );
 
-    const thisMonthPayments = await db
-      .select()
-      .from(payments)
-      .where(
-        and(
-          gte(payments.paymentDate, startOfMonth),
-          lte(payments.paymentDate, endOfMonth)
-        )
-      );
+    const thisMonthPayments = await db.collection("payments")
+      .find({
+        paymentDate: {
+          $gte: startOfMonth,
+          $lte: endOfMonth,
+        },
+      })
+      .toArray();
 
     const thisMonthCollected = thisMonthPayments.reduce(
-      (sum, payment) => sum + toNumber(payment.amount),
+      (sum: number, payment: any) => sum + (payment.amount || 0),
       0
     );
 
-    const activeClients = await db
-      .select()
-      .from(clients)
-      .where(eq(clients.status, "ACTIVE"));
+    const activeClients = await db.collection("clients")
+      .find({ status: "ACTIVE" })
+      .toArray();
 
     const countOverdueInvoices = allInvoices.filter(
-      (inv) => inv.status === "OVERDUE"
+      (inv: any) => inv.status === "OVERDUE"
     ).length;
 
     return {
@@ -818,45 +733,37 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUpcomingInvoices(): Promise<InvoiceWithRelations[]> {
+    const db = await getDb();
     const now = new Date();
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-    const upcomingInvoices = await db
-      .select()
-      .from(invoices)
-      .where(
-        and(
-          gte(invoices.dueDate, now),
-          lte(invoices.dueDate, thirtyDaysFromNow)
-        )
-      )
-      .orderBy(invoices.dueDate);
+    const upcomingInvoices = await db.collection("invoices")
+      .find({
+        dueDate: {
+          $gte: now,
+          $lte: thirtyDaysFromNow,
+        },
+      })
+      .sort({ dueDate: 1 })
+      .toArray();
 
     const invoicesWithRelations: InvoiceWithRelations[] = await Promise.all(
-      upcomingInvoices.map(async (invoice) => {
-        const [client] = await db
-          .select()
-          .from(clients)
-          .where(eq(clients.id, invoice.clientId));
+      upcomingInvoices.map(async (invoice: any) => {
+        const inv = toSchema<Invoice>(invoice);
+        const client = await db.collection("clients").findOne({ id: inv.clientId });
+        const clientData = client ? toSchema<Client>(client) : null;
 
         let project = null;
-        if (invoice.projectId) {
-          [project] = await db
-            .select()
-            .from(projects)
-            .where(eq(projects.id, invoice.projectId));
+        if (inv.projectId) {
+          const projectDoc = await db.collection("projects").findOne({ id: inv.projectId });
+          project = projectDoc ? toSchema<Project>(projectDoc) : null;
         }
 
         return {
-          ...invoice,
-          subtotal: toNumber(invoice.subtotal),
-          taxAmount: toNumber(invoice.taxAmount),
-          totalAmount: toNumber(invoice.totalAmount),
-          amountPaid: toNumber(invoice.amountPaid),
-          balanceDue: toNumber(invoice.balanceDue),
-          clientName: client?.name || "",
-          projectName: project?.name || null,
-          projectScope: project?.scope || null,
+          ...inv,
+          clientName: clientData?.name || "",
+          projectName: project?.name || undefined,
+          projectScope: project?.scope || undefined,
         };
       })
     );
@@ -870,46 +777,43 @@ export class DatabaseStorage implements IStorage {
     search?: string; 
     category?: string 
   }): Promise<VendorWithStats[]> {
-    const conditions = [];
+    const db = await getDb();
+    const query: any = {};
     
     if (filters?.status) {
-      conditions.push(eq(vendors.status, filters.status as any));
+      query.status = filters.status;
     }
     
     if (filters?.category) {
-      conditions.push(eq(vendors.category, filters.category as any));
+      query.category = filters.category;
     }
     
     if (filters?.search) {
-      const searchPattern = `%${filters.search}%`;
-      conditions.push(
-        or(
-          ilike(vendors.name, searchPattern),
-          ilike(vendors.email, searchPattern),
-          ilike(vendors.contactName, searchPattern)
-        )!
-      );
+      query.$or = [
+        { name: { $regex: filters.search, $options: "i" } },
+        { email: { $regex: filters.search, $options: "i" } },
+        { contactName: { $regex: filters.search, $options: "i" } },
+      ];
     }
 
-    const vendorList = await db
-      .select()
-      .from(vendors)
-      .where(conditions.length > 0 ? and(...conditions) : undefined);
+    const vendorList = await db.collection("vendors")
+      .find(query)
+      .toArray();
 
     // Add stats
     const vendorsWithStats: VendorWithStats[] = await Promise.all(
-      vendorList.map(async (vendor) => {
-        const vendorExpenses = await db
-          .select()
-          .from(expenses)
-          .where(eq(expenses.vendorId, vendor.id));
+      vendorList.map(async (vendor: any) => {
+        const vendorDoc = toSchema<Vendor>(vendor);
+        const vendorExpenses = await db.collection("expenses")
+          .find({ vendorId: vendorDoc.id })
+          .toArray();
 
         const totalSpend = vendorExpenses
-          .filter((exp) => exp.status === "PAID")
-          .reduce((sum, exp) => sum + toNumber(exp.amount), 0);
+          .filter((exp: any) => exp.status === "PAID")
+          .reduce((sum: number, exp: any) => sum + (exp.amount || 0), 0);
 
         return {
-          ...vendor,
+          ...vendorDoc,
           totalSpend,
         };
       })
@@ -919,70 +823,79 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getVendorById(id: string): Promise<Vendor | undefined> {
-    const [vendor] = await db.select().from(vendors).where(eq(vendors.id, id));
-    return vendor || undefined;
+    const db = await getDb();
+    const vendor = await db.collection("vendors").findOne({ id });
+    return vendor ? toSchema<Vendor>(vendor) : undefined;
   }
 
   async createVendor(vendor: InsertVendor): Promise<Vendor> {
-    const [newVendor] = await db
-      .insert(vendors)
-      .values({
-        id: nanoid(),
-        ...vendor,
-      })
-      .returning();
-    return newVendor;
+    const db = await getDb();
+    const newVendor = {
+      id: nanoid(),
+      ...vendor,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("vendors").insertOne(toMongo(newVendor));
+    return toSchema<Vendor>(newVendor);
   }
 
   async updateVendor(id: string, vendor: Partial<InsertVendor>): Promise<Vendor> {
-    const [updated] = await db
-      .update(vendors)
-      .set({ ...vendor, updatedAt: new Date() })
-      .where(eq(vendors.id, id))
-      .returning();
-    if (!updated) throw new Error("Vendor not found");
-    return updated;
+    const db = await getDb();
+    const result = await db.collection("vendors").findOneAndUpdate(
+      { id },
+      { $set: { ...vendor, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+    if (!result) throw new Error("Vendor not found");
+    return toSchema<Vendor>(result);
   }
 
   async updateVendorStatus(id: string, status: string): Promise<Vendor> {
-    const [updated] = await db
-      .update(vendors)
-      .set({ status: status as any, updatedAt: new Date() })
-      .where(eq(vendors.id, id))
-      .returning();
-    if (!updated) throw new Error("Vendor not found");
-    return updated;
+    const db = await getDb();
+    const result = await db.collection("vendors").findOneAndUpdate(
+      { id },
+      { $set: { status, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+    if (!result) throw new Error("Vendor not found");
+    return toSchema<Vendor>(result);
   }
 
   // Expense Category methods
   async getExpenseCategories(): Promise<ExpenseCategory[]> {
-    return await db.select().from(expenseCategories);
+    const db = await getDb();
+    const categories = await db.collection("expenseCategories").find({}).toArray();
+    return categories.map(toSchema<ExpenseCategory>);
   }
 
   async getExpenseCategoryById(id: string): Promise<ExpenseCategory | undefined> {
-    const [category] = await db.select().from(expenseCategories).where(eq(expenseCategories.id, id));
-    return category || undefined;
+    const db = await getDb();
+    const category = await db.collection("expenseCategories").findOne({ id });
+    return category ? toSchema<ExpenseCategory>(category) : undefined;
   }
 
   async createExpenseCategory(category: InsertExpenseCategory): Promise<ExpenseCategory> {
-    const [newCategory] = await db
-      .insert(expenseCategories)
-      .values({
-        id: nanoid(),
-        ...category,
-      })
-      .returning();
-    return newCategory;
+    const db = await getDb();
+    const newCategory = {
+      id: nanoid(),
+      ...category,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("expenseCategories").insertOne(toMongo(newCategory));
+    return toSchema<ExpenseCategory>(newCategory);
   }
 
   async updateExpenseCategory(id: string, category: Partial<InsertExpenseCategory>): Promise<ExpenseCategory> {
-    const [updated] = await db
-      .update(expenseCategories)
-      .set({ ...category, updatedAt: new Date() })
-      .where(eq(expenseCategories.id, id))
-      .returning();
-    if (!updated) throw new Error("Expense category not found");
-    return updated;
+    const db = await getDb();
+    const result = await db.collection("expenseCategories").findOneAndUpdate(
+      { id },
+      { $set: { ...category, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+    if (!result) throw new Error("Expense category not found");
+    return toSchema<ExpenseCategory>(result);
   }
 
   // Expense methods
@@ -993,54 +906,50 @@ export class DatabaseStorage implements IStorage {
     categoryId?: string;
     status?: string;
   }): Promise<ExpenseWithRelations[]> {
-    const conditions = [];
+    const db = await getDb();
+    const query: any = {};
     
     if (filters?.fromDate) {
-      conditions.push(gte(expenses.expenseDate, new Date(filters.fromDate)));
+      query.expenseDate = { ...query.expenseDate, $gte: new Date(filters.fromDate) };
     }
     
     if (filters?.toDate) {
-      conditions.push(lte(expenses.expenseDate, new Date(filters.toDate)));
+      query.expenseDate = { ...query.expenseDate, $lte: new Date(filters.toDate) };
     }
     
     if (filters?.vendorId) {
-      conditions.push(eq(expenses.vendorId, filters.vendorId));
+      query.vendorId = filters.vendorId;
     }
     
     if (filters?.categoryId) {
-      conditions.push(eq(expenses.categoryId, filters.categoryId));
+      query.categoryId = filters.categoryId;
     }
     
     if (filters?.status) {
-      conditions.push(eq(expenses.status, filters.status as any));
+      query.status = filters.status;
     }
 
-    const expenseList = await db
-      .select()
-      .from(expenses)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(expenses.expenseDate));
+    const expenseList = await db.collection("expenses")
+      .find(query)
+      .sort({ expenseDate: -1 })
+      .toArray();
 
     // Add relations
     const expensesWithRelations: ExpenseWithRelations[] = await Promise.all(
-      expenseList.map(async (expense) => {
+      expenseList.map(async (expense: any) => {
+        const exp = toSchema<Expense>(expense);
         let vendor = null;
-        if (expense.vendorId) {
-          [vendor] = await db
-            .select()
-            .from(vendors)
-            .where(eq(vendors.id, expense.vendorId));
+        if (exp.vendorId) {
+          const vendorDoc = await db.collection("vendors").findOne({ id: exp.vendorId });
+          vendor = vendorDoc ? toSchema<Vendor>(vendorDoc) : null;
         }
 
-        const [category] = await db
-          .select()
-          .from(expenseCategories)
-          .where(eq(expenseCategories.id, expense.categoryId));
+        const categoryDoc = await db.collection("expenseCategories").findOne({ id: exp.categoryId });
+        const category = categoryDoc ? toSchema<ExpenseCategory>(categoryDoc) : null;
 
         return {
-          ...expense,
-          amount: toNumber(expense.amount),
-          vendorName: vendor?.name || null,
+          ...exp,
+          vendorName: vendor?.name || undefined,
           categoryName: category?.name || "",
         };
       })
@@ -1050,69 +959,58 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getExpenseById(id: string): Promise<ExpenseWithRelations | undefined> {
-    const [expense] = await db.select().from(expenses).where(eq(expenses.id, id));
+    const db = await getDb();
+    const expense = await db.collection("expenses").findOne({ id });
     if (!expense) return undefined;
 
+    const exp = toSchema<Expense>(expense);
     let vendor = null;
-    if (expense.vendorId) {
-      [vendor] = await db
-        .select()
-        .from(vendors)
-        .where(eq(vendors.id, expense.vendorId));
+    if (exp.vendorId) {
+      const vendorDoc = await db.collection("vendors").findOne({ id: exp.vendorId });
+      vendor = vendorDoc ? toSchema<Vendor>(vendorDoc) : null;
     }
 
-    const [category] = await db
-      .select()
-      .from(expenseCategories)
-      .where(eq(expenseCategories.id, expense.categoryId));
+    const categoryDoc = await db.collection("expenseCategories").findOne({ id: exp.categoryId });
+    const category = categoryDoc ? toSchema<ExpenseCategory>(categoryDoc) : null;
 
     return {
-      ...expense,
-      amount: toNumber(expense.amount),
-      vendorName: vendor?.name || null,
+      ...exp,
+      vendorName: vendor?.name || undefined,
       categoryName: category?.name || "",
     };
   }
 
   async createExpense(expense: InsertExpense): Promise<Expense> {
-    const [newExpense] = await db
-      .insert(expenses)
-      .values({
-        id: nanoid(),
-        ...expense,
-        amount: expense.amount.toString(),
-        expenseDate: new Date(expense.expenseDate),
-        dueDate: expense.dueDate ? new Date(expense.dueDate) : null,
-        paidDate: expense.paidDate ? new Date(expense.paidDate) : null,
-      })
-      .returning();
-    
-    return {
-      ...newExpense,
-      amount: toNumber(newExpense.amount),
+    const db = await getDb();
+    const newExpense = {
+      id: nanoid(),
+      ...expense,
+      expenseDate: new Date(expense.expenseDate),
+      dueDate: expense.dueDate ? new Date(expense.dueDate) : null,
+      paidDate: expense.paidDate ? new Date(expense.paidDate) : null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
+    await db.collection("expenses").insertOne(toMongo(newExpense));
+    return toSchema<Expense>(newExpense);
   }
 
   async updateExpense(id: string, expense: Partial<InsertExpense>): Promise<Expense> {
+    const db = await getDb();
     const updateData: any = { ...expense, updatedAt: new Date() };
     
-    if (expense.amount !== undefined) updateData.amount = expense.amount.toString();
     if (expense.expenseDate) updateData.expenseDate = new Date(expense.expenseDate);
-    if (expense.dueDate) updateData.dueDate = new Date(expense.dueDate);
-    if (expense.paidDate) updateData.paidDate = new Date(expense.paidDate);
+    if (expense.dueDate !== undefined) updateData.dueDate = expense.dueDate ? new Date(expense.dueDate) : null;
+    if (expense.paidDate !== undefined) updateData.paidDate = expense.paidDate ? new Date(expense.paidDate) : null;
 
-    const [updated] = await db
-      .update(expenses)
-      .set(updateData)
-      .where(eq(expenses.id, id))
-      .returning();
+    const result = await db.collection("expenses").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
     
-    if (!updated) throw new Error("Expense not found");
-    
-    return {
-      ...updated,
-      amount: toNumber(updated.amount),
-    };
+    if (!result) throw new Error("Expense not found");
+    return toSchema<Expense>(result);
   }
 
   async markExpensePaid(id: string, data: { 
@@ -1120,109 +1018,312 @@ export class DatabaseStorage implements IStorage {
     paymentMethod: string; 
     reference: string 
   }): Promise<Expense> {
-    const [updated] = await db
-      .update(expenses)
-      .set({
-        paidDate: data.paymentDate,
-        paymentMethod: data.paymentMethod as any,
-        reference: data.reference,
-        status: "PAID",
-        updatedAt: new Date(),
-      })
-      .where(eq(expenses.id, id))
-      .returning();
+    const db = await getDb();
+    const result = await db.collection("expenses").findOneAndUpdate(
+      { id },
+      {
+        $set: {
+          paidDate: data.paymentDate,
+          paymentMethod: data.paymentMethod,
+          reference: data.reference,
+          status: "PAID",
+          updatedAt: new Date(),
+        },
+      },
+      { returnDocument: "after" }
+    );
     
-    if (!updated) throw new Error("Expense not found");
-    
-    return {
-      ...updated,
-      amount: toNumber(updated.amount),
-    };
+    if (!result) throw new Error("Expense not found");
+    return toSchema<Expense>(result);
   }
 
   // Team Member methods
   async getTeamMembers(filters?: { status?: string }): Promise<TeamMember[]> {
+    const db = await getDb();
+    const query: any = {};
     if (filters?.status) {
-      const members = await db
-        .select()
-        .from(teamMembers)
-        .where(eq(teamMembers.status, filters.status as any));
-      
-      return members.map((member) => ({
-        ...member,
-        baseSalary: toNumber(member.baseSalary),
-      }));
+      query.status = filters.status;
     }
     
-    const members = await db.select().from(teamMembers);
-    return members.map((member) => ({
-      ...member,
-      baseSalary: toNumber(member.baseSalary),
-    }));
+    const members = await db.collection("teamMembers").find(query).toArray();
+    return members.map(toSchema<TeamMember>);
+  }
+
+  // Job Role methods
+  async getJobRoles(filters?: { status?: string }): Promise<JobRole[]> {
+    const db = await getDb();
+    const query: any = {};
+    
+    if (filters?.status && filters.status !== "all") {
+      query.status = filters.status;
+    }
+
+    const roles = await db.collection("jobRoles")
+      .find(query)
+      .sort({ title: 1 })
+      .toArray();
+
+    return roles.map(toSchema<JobRole>);
+  }
+
+  async getJobRoleById(id: string): Promise<JobRole | undefined> {
+    const db = await getDb();
+    const role = await db.collection("jobRoles").findOne({ id });
+    return role ? toSchema<JobRole>(role) : undefined;
+  }
+
+  async createJobRole(role: InsertJobRole): Promise<JobRole> {
+    const db = await getDb();
+    const newRole = {
+      id: nanoid(),
+      ...role,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("jobRoles").insertOne(toMongo(newRole));
+    return toSchema<JobRole>(newRole);
+  }
+
+  async updateJobRole(id: string, role: Partial<InsertJobRole>): Promise<JobRole> {
+    const db = await getDb();
+    const result = await db.collection("jobRoles").findOneAndUpdate(
+      { id },
+      { $set: { ...role, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+    
+    if (!result) throw new Error("Job role not found");
+    return toSchema<JobRole>(result);
+  }
+
+  async seedDefaultJobRoles(): Promise<void> {
+    const db = await getDb();
+    
+    // Default job roles for a marketing agency - comprehensive list
+    const defaultRoles = [
+      // Leadership & Management
+      { title: "CEO / Managing Director", description: "Chief Executive Officer, leads the agency", status: "ACTIVE" as const },
+      { title: "COO", description: "Chief Operating Officer, manages operations", status: "ACTIVE" as const },
+      { title: "CFO", description: "Chief Financial Officer, manages finances", status: "ACTIVE" as const },
+      { title: "CMO", description: "Chief Marketing Officer, leads marketing strategy", status: "ACTIVE" as const },
+      { title: "Creative Director", description: "Leads creative vision and oversees all creative output", status: "ACTIVE" as const },
+      { title: "Art Director", description: "Manages visual aspects of campaigns and designs", status: "ACTIVE" as const },
+      { title: "Associate Creative Director", description: "Supports creative director in leading creative teams", status: "ACTIVE" as const },
+      
+      // Account Management
+      { title: "Account Director", description: "Senior client relationship manager", status: "ACTIVE" as const },
+      { title: "Account Manager", description: "Manages client relationships and projects", status: "ACTIVE" as const },
+      { title: "Senior Account Manager", description: "Experienced account manager handling key clients", status: "ACTIVE" as const },
+      { title: "Account Executive", description: "Supports account management and client communication", status: "ACTIVE" as const },
+      { title: "Account Coordinator", description: "Assists with account administration and coordination", status: "ACTIVE" as const },
+      
+      // Project Management
+      { title: "Project Director", description: "Oversees multiple projects and project managers", status: "ACTIVE" as const },
+      { title: "Project Manager", description: "Oversees project timelines and deliverables", status: "ACTIVE" as const },
+      { title: "Senior Project Manager", description: "Manages complex, high-value projects", status: "ACTIVE" as const },
+      { title: "Project Coordinator", description: "Assists with project scheduling and coordination", status: "ACTIVE" as const },
+      
+      // Strategy
+      { title: "Strategy Director", description: "Leads strategic planning and brand strategy", status: "ACTIVE" as const },
+      { title: "Brand Strategist", description: "Develops brand positioning and strategy", status: "ACTIVE" as const },
+      { title: "Senior Strategist", description: "Develops comprehensive marketing strategies", status: "ACTIVE" as const },
+      { title: "Content Strategist", description: "Develops content strategies and editorial calendars", status: "ACTIVE" as const },
+      { title: "Digital Strategist", description: "Plans digital marketing and online presence strategies", status: "ACTIVE" as const },
+      
+      // Creative - Copy
+      { title: "Head of Copy", description: "Leads copywriting team and content direction", status: "ACTIVE" as const },
+      { title: "Senior Copywriter", description: "Experienced copywriter leading content strategy", status: "ACTIVE" as const },
+      { title: "Copywriter", description: "Creates compelling written content for campaigns", status: "ACTIVE" as const },
+      { title: "Junior Copywriter", description: "Entry-level copywriter developing skills", status: "ACTIVE" as const },
+      { title: "Content Writer", description: "Writes blog posts, articles, and web content", status: "ACTIVE" as const },
+      { title: "Script Writer", description: "Writes scripts for video and audio content", status: "ACTIVE" as const },
+      
+      // Creative - Design
+      { title: "Design Director", description: "Leads design team and visual direction", status: "ACTIVE" as const },
+      { title: "Senior Graphic Designer", description: "Experienced designer handling complex projects", status: "ACTIVE" as const },
+      { title: "Graphic Designer", description: "Creates visual designs for digital and print media", status: "ACTIVE" as const },
+      { title: "Junior Graphic Designer", description: "Entry-level designer developing skills", status: "ACTIVE" as const },
+      { title: "UI/UX Designer", description: "Designs user interfaces and experiences", status: "ACTIVE" as const },
+      { title: "Senior UI/UX Designer", description: "Leads UI/UX design for complex projects", status: "ACTIVE" as const },
+      { title: "Motion Graphics Designer", description: "Creates animated and video content", status: "ACTIVE" as const },
+      { title: "3D Designer", description: "Creates 3D graphics and visualizations", status: "ACTIVE" as const },
+      { title: "Illustrator", description: "Creates custom illustrations and artwork", status: "ACTIVE" as const },
+      
+      // Video & Production
+      { title: "Head of Production", description: "Leads video and content production", status: "ACTIVE" as const },
+      { title: "Video Producer", description: "Produces video content from concept to delivery", status: "ACTIVE" as const },
+      { title: "Senior Video Editor", description: "Leads video editing and post-production", status: "ACTIVE" as const },
+      { title: "Video Editor", description: "Edits and post-produces video content", status: "ACTIVE" as const },
+      { title: "Videographer", description: "Shoots video content for campaigns", status: "ACTIVE" as const },
+      { title: "Photographer", description: "Captures professional photography for campaigns", status: "ACTIVE" as const },
+      { title: "Audio Engineer", description: "Manages audio production and sound design", status: "ACTIVE" as const },
+      
+      // Digital Marketing
+      { title: "Head of Digital", description: "Leads all digital marketing initiatives", status: "ACTIVE" as const },
+      { title: "Digital Marketing Manager", description: "Manages digital marketing strategies and campaigns", status: "ACTIVE" as const },
+      { title: "Digital Marketing Executive", description: "Executes digital marketing campaigns", status: "ACTIVE" as const },
+      { title: "Performance Marketing Manager", description: "Manages performance-based marketing campaigns", status: "ACTIVE" as const },
+      
+      // Social Media
+      { title: "Head of Social Media", description: "Leads social media strategy and team", status: "ACTIVE" as const },
+      { title: "Social Media Manager", description: "Manages social media presence and content", status: "ACTIVE" as const },
+      { title: "Senior Social Media Manager", description: "Leads social media strategy for key accounts", status: "ACTIVE" as const },
+      { title: "Social Media Executive", description: "Executes social media campaigns and engagement", status: "ACTIVE" as const },
+      { title: "Social Media Coordinator", description: "Coordinates social media content and scheduling", status: "ACTIVE" as const },
+      { title: "Community Manager", description: "Manages online community engagement", status: "ACTIVE" as const },
+      
+      // SEO & SEM
+      { title: "Head of SEO", description: "Leads search engine optimization strategy", status: "ACTIVE" as const },
+      { title: "SEO Manager", description: "Manages SEO strategy and implementation", status: "ACTIVE" as const },
+      { title: "SEO Specialist", description: "Optimizes content for search engines", status: "ACTIVE" as const },
+      { title: "SEO Executive", description: "Executes SEO tasks and reporting", status: "ACTIVE" as const },
+      { title: "SEM Manager", description: "Manages search engine marketing campaigns", status: "ACTIVE" as const },
+      { title: "PPC Manager", description: "Manages pay-per-click campaigns", status: "ACTIVE" as const },
+      { title: "PPC Specialist", description: "Manages pay-per-click advertising campaigns", status: "ACTIVE" as const },
+      
+      // Media
+      { title: "Head of Media", description: "Leads media planning and buying", status: "ACTIVE" as const },
+      { title: "Media Director", description: "Directs media strategy and planning", status: "ACTIVE" as const },
+      { title: "Media Planner", description: "Plans media buying and advertising placements", status: "ACTIVE" as const },
+      { title: "Senior Media Planner", description: "Leads media planning for major campaigns", status: "ACTIVE" as const },
+      { title: "Media Buyer", description: "Executes media purchases and negotiations", status: "ACTIVE" as const },
+      { title: "Programmatic Specialist", description: "Manages programmatic advertising", status: "ACTIVE" as const },
+      
+      // Analytics & Data
+      { title: "Head of Analytics", description: "Leads data analytics and insights", status: "ACTIVE" as const },
+      { title: "Marketing Analyst", description: "Analyzes marketing data and provides insights", status: "ACTIVE" as const },
+      { title: "Senior Analyst", description: "Leads data analysis for complex projects", status: "ACTIVE" as const },
+      { title: "Data Analyst", description: "Analyzes campaign performance data", status: "ACTIVE" as const },
+      { title: "Business Intelligence Analyst", description: "Provides business insights from data", status: "ACTIVE" as const },
+      
+      // PR & Communications
+      { title: "Head of PR", description: "Leads public relations strategy", status: "ACTIVE" as const },
+      { title: "PR Manager", description: "Manages public relations campaigns", status: "ACTIVE" as const },
+      { title: "PR Specialist", description: "Manages public relations and media outreach", status: "ACTIVE" as const },
+      { title: "PR Executive", description: "Executes PR activities and media relations", status: "ACTIVE" as const },
+      { title: "Communications Manager", description: "Manages corporate communications", status: "ACTIVE" as const },
+      
+      // Influencer Marketing
+      { title: "Head of Influencer Marketing", description: "Leads influencer marketing strategy", status: "ACTIVE" as const },
+      { title: "Influencer Marketing Manager", description: "Manages influencer partnerships and campaigns", status: "ACTIVE" as const },
+      { title: "Influencer Coordinator", description: "Coordinates influencer outreach and relationships", status: "ACTIVE" as const },
+      
+      // Development & Technology
+      { title: "Head of Technology", description: "Leads technology and development team", status: "ACTIVE" as const },
+      { title: "Technical Director", description: "Directs technical implementation", status: "ACTIVE" as const },
+      { title: "Senior Web Developer", description: "Leads web development projects", status: "ACTIVE" as const },
+      { title: "Web Developer", description: "Develops and maintains websites", status: "ACTIVE" as const },
+      { title: "Frontend Developer", description: "Builds user-facing web interfaces", status: "ACTIVE" as const },
+      { title: "Backend Developer", description: "Develops server-side applications", status: "ACTIVE" as const },
+      { title: "Full Stack Developer", description: "Develops both frontend and backend", status: "ACTIVE" as const },
+      { title: "WordPress Developer", description: "Specializes in WordPress development", status: "ACTIVE" as const },
+      { title: "Mobile App Developer", description: "Develops mobile applications", status: "ACTIVE" as const },
+      
+      // Operations & Administration
+      { title: "Operations Director", description: "Directs agency operations", status: "ACTIVE" as const },
+      { title: "Operations Manager", description: "Manages day-to-day agency operations", status: "ACTIVE" as const },
+      { title: "Office Manager", description: "Manages office operations and facilities", status: "ACTIVE" as const },
+      { title: "Office Administrator", description: "Handles administrative tasks and office management", status: "ACTIVE" as const },
+      { title: "Executive Assistant", description: "Provides executive-level administrative support", status: "ACTIVE" as const },
+      { title: "Receptionist", description: "Manages front desk and visitor coordination", status: "ACTIVE" as const },
+      
+      // HR & People
+      { title: "HR Director", description: "Leads human resources strategy", status: "ACTIVE" as const },
+      { title: "HR Manager", description: "Manages human resources and recruitment", status: "ACTIVE" as const },
+      { title: "HR Executive", description: "Handles HR operations and employee relations", status: "ACTIVE" as const },
+      { title: "Talent Acquisition Specialist", description: "Manages recruitment and hiring", status: "ACTIVE" as const },
+      
+      // Finance
+      { title: "Finance Director", description: "Directs financial operations", status: "ACTIVE" as const },
+      { title: "Finance Manager", description: "Manages financial operations and budgets", status: "ACTIVE" as const },
+      { title: "Accountant", description: "Manages accounting and financial records", status: "ACTIVE" as const },
+      { title: "Accounts Executive", description: "Handles accounts payable and receivable", status: "ACTIVE" as const },
+      
+      // Business Development
+      { title: "Business Development Director", description: "Leads new business acquisition", status: "ACTIVE" as const },
+      { title: "Business Development Manager", description: "Manages new business opportunities", status: "ACTIVE" as const },
+      { title: "Sales Manager", description: "Manages sales and client acquisition", status: "ACTIVE" as const },
+      
+      // Interns & Trainees
+      { title: "Creative Intern", description: "Creative department intern", status: "ACTIVE" as const },
+      { title: "Design Intern", description: "Design department intern", status: "ACTIVE" as const },
+      { title: "Marketing Intern", description: "Marketing department intern", status: "ACTIVE" as const },
+      { title: "Social Media Intern", description: "Social media department intern", status: "ACTIVE" as const },
+      { title: "Content Intern", description: "Content department intern", status: "ACTIVE" as const },
+      { title: "Development Intern", description: "Development department intern", status: "ACTIVE" as const },
+      { title: "HR Intern", description: "HR department intern", status: "ACTIVE" as const },
+      { title: "Operations Intern", description: "Operations department intern", status: "ACTIVE" as const },
+    ];
+
+    // Get existing role titles
+    const existingRoles = await db.collection("jobRoles").find({}).toArray();
+    const existingTitles = new Set(existingRoles.map((r: any) => r.title.toLowerCase()));
+
+    // Filter out roles that already exist
+    const rolesToInsert = defaultRoles
+      .filter(role => !existingTitles.has(role.title.toLowerCase()))
+      .map(role => ({
+        id: nanoid(),
+        ...role,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+
+    if (rolesToInsert.length > 0) {
+      await db.collection("jobRoles").insertMany(rolesToInsert.map(toMongo));
+      console.log(`Seeded ${rolesToInsert.length} default job roles`);
+    } else {
+      console.log("All default job roles already exist");
+    }
   }
 
   async getTeamMemberById(id: string): Promise<TeamMember | undefined> {
-    const [member] = await db.select().from(teamMembers).where(eq(teamMembers.id, id));
-    if (!member) return undefined;
-    
-    return {
-      ...member,
-      baseSalary: toNumber(member.baseSalary),
-    };
+    const db = await getDb();
+    const member = await db.collection("teamMembers").findOne({ id });
+    return member ? toSchema<TeamMember>(member) : undefined;
   }
 
   async createTeamMember(member: InsertTeamMember): Promise<TeamMember> {
-    const [newMember] = await db
-      .insert(teamMembers)
-      .values({
-        id: nanoid(),
-        ...member,
-        baseSalary: member.baseSalary.toString(),
-        joinedDate: new Date(member.joinedDate),
-        exitDate: member.exitDate ? new Date(member.exitDate) : null,
-      })
-      .returning();
-    
-    return {
-      ...newMember,
-      baseSalary: toNumber(newMember.baseSalary),
+    const db = await getDb();
+    const newMember = {
+      id: nanoid(),
+      ...member,
+      joinedDate: new Date(member.joinedDate),
+      exitDate: member.exitDate ? new Date(member.exitDate) : null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
+    await db.collection("teamMembers").insertOne(toMongo(newMember));
+    return toSchema<TeamMember>(newMember);
   }
 
   async updateTeamMember(id: string, member: Partial<InsertTeamMember>): Promise<TeamMember> {
+    const db = await getDb();
     const updateData: any = { ...member, updatedAt: new Date() };
     
-    if (member.baseSalary !== undefined) updateData.baseSalary = member.baseSalary.toString();
     if (member.joinedDate) updateData.joinedDate = new Date(member.joinedDate);
-    if (member.exitDate) updateData.exitDate = new Date(member.exitDate);
+    if (member.exitDate !== undefined) updateData.exitDate = member.exitDate ? new Date(member.exitDate) : null;
 
-    const [updated] = await db
-      .update(teamMembers)
-      .set(updateData)
-      .where(eq(teamMembers.id, id))
-      .returning();
+    const result = await db.collection("teamMembers").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
     
-    if (!updated) throw new Error("Team member not found");
-    
-    return {
-      ...updated,
-      baseSalary: toNumber(updated.baseSalary),
-    };
+    if (!result) throw new Error("Team member not found");
+    return toSchema<TeamMember>(result);
   }
 
   async updateTeamMemberStatus(id: string, status: string): Promise<TeamMember> {
-    const [updated] = await db
-      .update(teamMembers)
-      .set({ status: status as any, updatedAt: new Date() })
-      .where(eq(teamMembers.id, id))
-      .returning();
+    const db = await getDb();
+    const result = await db.collection("teamMembers").findOneAndUpdate(
+      { id },
+      { $set: { status, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
     
-    if (!updated) throw new Error("Team member not found");
-    
-    return {
-      ...updated,
-      baseSalary: toNumber(updated.baseSalary),
-    };
+    if (!result) throw new Error("Team member not found");
+    return toSchema<TeamMember>(result);
   }
 
   // Salary Payment methods
@@ -1231,77 +1332,64 @@ export class DatabaseStorage implements IStorage {
     month?: string; 
     status?: string 
   }): Promise<SalaryPayment[]> {
-    const conditions = [];
+    const db = await getDb();
+    const query: any = {};
     
     if (filters?.teamMemberId) {
-      conditions.push(eq(salaryPayments.teamMemberId, filters.teamMemberId));
+      query.teamMemberId = filters.teamMemberId;
     }
     
     if (filters?.month) {
-      conditions.push(eq(salaryPayments.month, filters.month));
+      query.month = filters.month;
     }
     
     if (filters?.status) {
-      conditions.push(eq(salaryPayments.status, filters.status as any));
+      query.status = filters.status;
     }
 
-    const payments = await db
-      .select()
-      .from(salaryPayments)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(salaryPayments.month));
+    const payments = await db.collection("salaryPayments")
+      .find(query)
+      .sort({ month: -1 })
+      .toArray();
 
-    return payments.map((payment) => ({
-      ...payment,
-      amount: toNumber(payment.amount),
-    }));
+    return payments.map(toSchema<SalaryPayment>);
   }
 
   async getSalaryPaymentById(id: string): Promise<SalaryPayment | undefined> {
-    const [payment] = await db.select().from(salaryPayments).where(eq(salaryPayments.id, id));
-    if (!payment) return undefined;
-    
-    return {
-      ...payment,
-      amount: toNumber(payment.amount),
-    };
+    const db = await getDb();
+    const payment = await db.collection("salaryPayments").findOne({ id });
+    return payment ? toSchema<SalaryPayment>(payment) : undefined;
   }
 
   async createSalaryPayment(salary: InsertSalaryPayment): Promise<SalaryPayment> {
-    const [newSalary] = await db
-      .insert(salaryPayments)
-      .values({
-        id: nanoid(),
-        ...salary,
-        amount: salary.amount.toString(),
-        paymentDate: salary.paymentDate ? new Date(salary.paymentDate) : null,
-      })
-      .returning();
-    
-    return {
-      ...newSalary,
-      amount: toNumber(newSalary.amount),
+    const db = await getDb();
+    const newSalary = {
+      id: nanoid(),
+      ...salary,
+      paymentDate: salary.paymentDate ? new Date(salary.paymentDate) : null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
+    await db.collection("salaryPayments").insertOne(toMongo(newSalary));
+    return toSchema<SalaryPayment>(newSalary);
   }
 
   async updateSalaryPayment(id: string, salary: Partial<InsertSalaryPayment>): Promise<SalaryPayment> {
+    const db = await getDb();
     const updateData: any = { ...salary, updatedAt: new Date() };
     
-    if (salary.amount !== undefined) updateData.amount = salary.amount.toString();
-    if (salary.paymentDate) updateData.paymentDate = new Date(salary.paymentDate);
+    if (salary.paymentDate !== undefined) {
+      updateData.paymentDate = salary.paymentDate ? new Date(salary.paymentDate) : null;
+    }
 
-    const [updated] = await db
-      .update(salaryPayments)
-      .set(updateData)
-      .where(eq(salaryPayments.id, id))
-      .returning();
+    const result = await db.collection("salaryPayments").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
     
-    if (!updated) throw new Error("Salary payment not found");
-    
-    return {
-      ...updated,
-      amount: toNumber(updated.amount),
-    };
+    if (!result) throw new Error("Salary payment not found");
+    return toSchema<SalaryPayment>(result);
   }
 
   async markSalaryPaid(id: string, data: { 
@@ -1309,24 +1397,23 @@ export class DatabaseStorage implements IStorage {
     paymentMethod: string; 
     reference: string 
   }): Promise<SalaryPayment> {
-    const [updated] = await db
-      .update(salaryPayments)
-      .set({
-        paymentDate: data.paymentDate,
-        paymentMethod: data.paymentMethod as any,
-        reference: data.reference,
-        status: "PAID",
-        updatedAt: new Date(),
-      })
-      .where(eq(salaryPayments.id, id))
-      .returning();
+    const db = await getDb();
+    const result = await db.collection("salaryPayments").findOneAndUpdate(
+      { id },
+      {
+        $set: {
+          paymentDate: data.paymentDate,
+          paymentMethod: data.paymentMethod,
+          reference: data.reference,
+          status: "PAID",
+          updatedAt: new Date(),
+        },
+      },
+      { returnDocument: "after" }
+    );
     
-    if (!updated) throw new Error("Salary payment not found");
-    
-    return {
-      ...updated,
-      amount: toNumber(updated.amount),
-    };
+    if (!result) throw new Error("Salary payment not found");
+    return toSchema<SalaryPayment>(result);
   }
 
   // Financial Dashboard
@@ -1334,73 +1421,72 @@ export class DatabaseStorage implements IStorage {
     fromDate?: string; 
     toDate?: string 
   }): Promise<FinancialSummary> {
+    const db = await getDb();
     const now = new Date();
     const fromDate = filters?.fromDate ? new Date(filters.fromDate) : new Date(now.getFullYear(), now.getMonth(), 1);
     const toDate = filters?.toDate ? new Date(filters.toDate) : new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
     // Total Invoiced
-    const invoicesInRange = await db
-      .select()
-      .from(invoices)
-      .where(
-        and(
-          gte(invoices.issueDate, fromDate),
-          lte(invoices.issueDate, toDate)
-        )
-      );
+    const invoicesInRange = await db.collection("invoices")
+      .find({
+        issueDate: {
+          $gte: fromDate,
+          $lte: toDate,
+        },
+      })
+      .toArray();
 
     const totalInvoiced = invoicesInRange.reduce(
-      (sum, inv) => sum + toNumber(inv.totalAmount),
+      (sum: number, inv: any) => sum + (inv.totalAmount || 0),
       0
     );
 
     // Total Collected
-    const paymentsInRange = await db
-      .select()
-      .from(payments)
-      .where(
-        and(
-          gte(payments.paymentDate, fromDate),
-          lte(payments.paymentDate, toDate)
-        )
-      );
+    const paymentsInRange = await db.collection("payments")
+      .find({
+        paymentDate: {
+          $gte: fromDate,
+          $lte: toDate,
+        },
+      })
+      .toArray();
 
     const totalCollected = paymentsInRange.reduce(
-      (sum, payment) => sum + toNumber(payment.amount),
+      (sum: number, payment: any) => sum + (payment.amount || 0),
       0
     );
 
     // Total Expenses
-    const expensesInRange = await db
-      .select()
-      .from(expenses)
-      .where(
-        and(
-          eq(expenses.status, "PAID"),
-          gte(expenses.expenseDate, fromDate),
-          lte(expenses.expenseDate, toDate)
-        )
-      );
+    const expensesInRange = await db.collection("expenses")
+      .find({
+        status: "PAID",
+        expenseDate: {
+          $gte: fromDate,
+          $lte: toDate,
+        },
+      })
+      .toArray();
 
     const totalExpenses = expensesInRange.reduce(
-      (sum, exp) => sum + toNumber(exp.amount),
+      (sum: number, exp: any) => sum + (exp.amount || 0),
       0
     );
 
     // Total Salaries
-    const salariesInRange = await db
-      .select()
-      .from(salaryPayments)
-      .where(
-        and(
-          eq(salaryPayments.status, "PAID"),
-          sql`${salaryPayments.month} >= ${fromDate.toISOString().slice(0, 7)}`,
-          sql`${salaryPayments.month} <= ${toDate.toISOString().slice(0, 7)}`
-        )
-      );
+    const fromMonth = fromDate.toISOString().slice(0, 7);
+    const toMonth = toDate.toISOString().slice(0, 7);
+    const salariesInRange = await db.collection("salaryPayments")
+      .find({
+        status: "PAID",
+        month: {
+          $gte: fromMonth,
+          $lte: toMonth,
+        },
+      })
+      .toArray();
 
     const totalSalaries = salariesInRange.reduce(
-      (sum, salary) => sum + toNumber(salary.amount),
+      (sum: number, salary: any) => sum + (salary.amount || 0),
       0
     );
 
@@ -1408,18 +1494,19 @@ export class DatabaseStorage implements IStorage {
     const netProfit = totalCollected - (totalExpenses + totalSalaries);
 
     // Breakdown by Category
-    const categories = await db.select().from(expenseCategories);
+    const categories = await db.collection("expenseCategories").find({}).toArray();
     const breakdownByCategory = await Promise.all(
-      categories.map(async (category) => {
+      categories.map(async (category: any) => {
+        const categoryDoc = toSchema<ExpenseCategory>(category);
         const categoryExpenses = expensesInRange.filter(
-          (exp) => exp.categoryId === category.id
+          (exp: any) => exp.categoryId === categoryDoc.id
         );
         const totalAmount = categoryExpenses.reduce(
-          (sum, exp) => sum + toNumber(exp.amount),
+          (sum: number, exp: any) => sum + (exp.amount || 0),
           0
         );
         return {
-          categoryName: category.name,
+          categoryName: categoryDoc.name,
           totalAmount,
         };
       })
@@ -1432,16 +1519,14 @@ export class DatabaseStorage implements IStorage {
       if (expense.vendorId) {
         const current = vendorSpend.get(expense.vendorId);
         if (current) {
-          current.total += toNumber(expense.amount);
+          current.total += expense.amount || 0;
         } else {
-          const [vendor] = await db
-            .select()
-            .from(vendors)
-            .where(eq(vendors.id, expense.vendorId));
+          const vendor = await db.collection("vendors").findOne({ id: expense.vendorId });
           if (vendor) {
+            const vendorDoc = toSchema<Vendor>(vendor);
             vendorSpend.set(expense.vendorId, {
-              name: vendor.name,
-              total: toNumber(expense.amount),
+              name: vendorDoc.name,
+              total: expense.amount || 0,
             });
           }
         }
@@ -1463,38 +1548,44 @@ export class DatabaseStorage implements IStorage {
       netProfit,
       totalInvoiced,  // Keep for reference
       totalSalaries,  // Keep for reference
-      breakdownByCategory: breakdownByCategory.filter((cat) => cat.totalAmount > 0),
+      breakdownByCategory: breakdownByCategory.filter((cat: any) => cat.totalAmount > 0),
       topVendors,
     };
   }
 
   // Company Profile methods
   async getCompanyProfile(): Promise<CompanyProfile | undefined> {
-    const [profile] = await db.select().from(companyProfiles).limit(1);
-    return profile || undefined;
+    const db = await getDb();
+    const profile = await db.collection("companyProfiles").findOne({});
+    return profile ? toSchema<CompanyProfile>(profile) : undefined;
   }
 
   async createCompanyProfile(profile: InsertCompanyProfile): Promise<CompanyProfile> {
-    const [newProfile] = await db
-      .insert(companyProfiles)
-      .values({
-        id: nanoid(),
-        ...profile,
-      })
-      .returning();
-    return newProfile;
+    const db = await getDb();
+    const newProfile = {
+      id: nanoid(),
+      ...profile,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("companyProfiles").insertOne(toMongo(newProfile));
+    return toSchema<CompanyProfile>(newProfile);
   }
 
   async updateCompanyProfile(id: string, profile: Partial<InsertCompanyProfile>): Promise<CompanyProfile> {
-    const [updated] = await db
-      .update(companyProfiles)
-      .set({
-        ...profile,
-        updatedAt: new Date(),
-      })
-      .where(eq(companyProfiles.id, id))
-      .returning();
-    return updated;
+    const db = await getDb();
+    const result = await db.collection("companyProfiles").findOneAndUpdate(
+      { id },
+      {
+        $set: {
+          ...profile,
+          updatedAt: new Date(),
+        },
+      },
+      { returnDocument: "after" }
+    );
+    if (!result) throw new Error("Company profile not found");
+    return toSchema<CompanyProfile>(result);
   }
 }
 

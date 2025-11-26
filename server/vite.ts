@@ -44,6 +44,12 @@ export async function setupVite(app: Express, server: Server) {
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
 
+    // Skip server-rendered routes (like /invoice/:id/view)
+    // These are handled by Express routes, not Vite/React
+    if (url.match(/^\/invoice\/[^/]+\/view/)) {
+      return next();
+    }
+
     try {
       const clientTemplate = path.resolve(
         import.meta.dirname,
@@ -79,7 +85,12 @@ export function serveStatic(app: Express) {
   app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
+  // Skip server-rendered routes (like /invoice/:id/view)
+  app.use("*", (req, res, next) => {
+    const url = req.originalUrl;
+    if (url.match(/^\/invoice\/[^/]+\/view/)) {
+      return next();
+    }
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }

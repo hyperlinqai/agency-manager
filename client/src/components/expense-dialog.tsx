@@ -51,16 +51,16 @@ export function ExpenseDialog({ expense, open, onClose }: ExpenseDialogProps) {
   const form = useForm<InsertExpense>({
     resolver: zodResolver(insertExpenseSchema),
     defaultValues: {
-      vendorId: null,
-      categoryId: null,
+      vendorId: undefined,
+      categoryId: "",
       description: "",
       amount: 0,
       currency: "INR",
       expenseDate: new Date().toISOString().split("T")[0],
-      dueDate: null,
-      paidDate: null,
+      dueDate: undefined,
+      paidDate: undefined,
       status: "DUE",
-      paymentMethod: null,
+      paymentMethod: undefined,
       reference: "",
       notes: "",
     },
@@ -69,31 +69,31 @@ export function ExpenseDialog({ expense, open, onClose }: ExpenseDialogProps) {
   useEffect(() => {
     if (expense) {
       form.reset({
-        vendorId: expense.vendorId,
+        vendorId: expense.vendorId || undefined,
         categoryId: expense.categoryId,
         description: expense.description,
         amount: Number(expense.amount),
         currency: expense.currency,
         expenseDate: expense.expenseDate ? new Date(expense.expenseDate).toISOString().split("T")[0] : "",
-        dueDate: expense.dueDate ? new Date(expense.dueDate).toISOString().split("T")[0] : null,
-        paidDate: expense.paidDate ? new Date(expense.paidDate).toISOString().split("T")[0] : null,
+        dueDate: expense.dueDate ? new Date(expense.dueDate).toISOString().split("T")[0] : undefined,
+        paidDate: expense.paidDate ? new Date(expense.paidDate).toISOString().split("T")[0] : undefined,
         status: expense.status,
-        paymentMethod: expense.paymentMethod,
+        paymentMethod: expense.paymentMethod || undefined,
         reference: expense.reference || "",
         notes: expense.notes || "",
       });
     } else {
       form.reset({
-        vendorId: null,
-        categoryId: null,
+        vendorId: undefined,
+        categoryId: "",
         description: "",
         amount: 0,
         currency: "INR",
         expenseDate: new Date().toISOString().split("T")[0],
-        dueDate: null,
-        paidDate: null,
+        dueDate: undefined,
+        paidDate: undefined,
         status: "DUE",
-        paymentMethod: null,
+        paymentMethod: undefined,
         reference: "",
         notes: "",
       });
@@ -102,7 +102,7 @@ export function ExpenseDialog({ expense, open, onClose }: ExpenseDialogProps) {
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertExpense) => {
-      return apiRequest("/api/expenses", "POST", data);
+      return apiRequest("POST", "/api/expenses", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
@@ -116,7 +116,7 @@ export function ExpenseDialog({ expense, open, onClose }: ExpenseDialogProps) {
 
   const updateMutation = useMutation({
     mutationFn: async (data: InsertExpense) => {
-      return apiRequest(`/api/expenses/${expense?.id}`, "PUT", data);
+      return apiRequest("PUT", `/api/expenses/${expense?.id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
@@ -170,7 +170,10 @@ export function ExpenseDialog({ expense, open, onClose }: ExpenseDialogProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Vendor (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <Select 
+                      onValueChange={(value) => field.onChange(value === "none" ? undefined : value)} 
+                      value={field.value || "none"}
+                    >
                       <FormControl>
                         <SelectTrigger data-testid="select-vendor">
                           <SelectValue placeholder="Select vendor" />
@@ -196,7 +199,10 @@ export function ExpenseDialog({ expense, open, onClose }: ExpenseDialogProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Category (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <Select 
+                      onValueChange={(value) => field.onChange(value === "none" ? "" : value)} 
+                      value={field.value || "none"}
+                    >
                       <FormControl>
                         <SelectTrigger data-testid="select-category">
                           <SelectValue placeholder="Select category" />
@@ -270,7 +276,13 @@ export function ExpenseDialog({ expense, open, onClose }: ExpenseDialogProps) {
                   <FormItem>
                     <FormLabel>Expense Date</FormLabel>
                     <FormControl>
-                      <Input {...field} type="date" data-testid="input-expense-date" />
+                      <Input 
+                        type="date" 
+                        value={typeof field.value === "string" ? field.value : (field.value ? new Date(field.value).toISOString().split("T")[0] : "")}
+                        onChange={(e) => field.onChange(e.target.value)}
+                        onBlur={field.onBlur}
+                        data-testid="input-expense-date" 
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -285,9 +297,10 @@ export function ExpenseDialog({ expense, open, onClose }: ExpenseDialogProps) {
                     <FormLabel>Due Date (Optional)</FormLabel>
                     <FormControl>
                       <Input
-                        {...field}
-                        value={field.value || ""}
                         type="date"
+                        value={field.value ? (typeof field.value === "string" ? field.value : new Date(field.value).toISOString().split("T")[0]) : ""}
+                        onChange={(e) => field.onChange(e.target.value || undefined)}
+                        onBlur={field.onBlur}
                         data-testid="input-due-date"
                       />
                     </FormControl>
@@ -310,9 +323,10 @@ export function ExpenseDialog({ expense, open, onClose }: ExpenseDialogProps) {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
+                      <SelectItem value="PLANNED">Planned</SelectItem>
                       <SelectItem value="DUE">Due</SelectItem>
                       <SelectItem value="PAID">Paid</SelectItem>
-                      <SelectItem value="OVERDUE">Overdue</SelectItem>
+                      <SelectItem value="CANCELLED">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
