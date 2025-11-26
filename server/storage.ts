@@ -898,6 +898,79 @@ export class DatabaseStorage implements IStorage {
     return toSchema<ExpenseCategory>(result);
   }
 
+  async seedDefaultExpenseCategories(): Promise<{ count: number }> {
+    const db = await getDb();
+    const defaultCategories = [
+      // Operations
+      { name: "Office Rent / Co-working", code: "RENT", group: "Operations" },
+      { name: "Utilities (Electricity, Internet, Water)", code: "UTIL", group: "Operations" },
+      { name: "Software & Subscriptions", code: "SOFTWARE", group: "Operations" },
+      { name: "Hosting / Domains", code: "HOSTING", group: "Operations" },
+      { name: "Equipment & Maintenance", code: "EQUIP", group: "Operations" },
+      { name: "Office Supplies", code: "SUPPLIES", group: "Operations" },
+      
+      // Marketing & Sales
+      { name: "Advertising (Meta / Google / Others)", code: "ADS", group: "Marketing & Sales" },
+      { name: "Lead Generation Tools", code: "LEADGEN", group: "Marketing & Sales" },
+      { name: "CRM / Automation Tools", code: "CRM", group: "Marketing & Sales" },
+      { name: "Branding & Creative Assets", code: "BRANDING", group: "Marketing & Sales" },
+      { name: "Events / Webinars / Sponsorships", code: "EVENTS", group: "Marketing & Sales" },
+      
+      // Team & HR
+      { name: "Salaries / Stipends", code: "SALARY", group: "Team & HR" },
+      { name: "Freelancer / Contractor Payouts", code: "FREELANCE", group: "Team & HR" },
+      { name: "Hiring & Onboarding", code: "HIRING", group: "Team & HR" },
+      { name: "Training / Courses", code: "TRAINING", group: "Team & HR" },
+      { name: "Employee Welfare", code: "WELFARE", group: "Team & HR" },
+      
+      // Client Project Costs
+      { name: "Outsourced Work", code: "OUTSOURCE", group: "Client Project Costs" },
+      { name: "Paid Assets (Stock images, Videos, Templates)", code: "ASSETS", group: "Client Project Costs" },
+      { name: "Media Buying for Clients", code: "MEDIABUY", group: "Client Project Costs" },
+      { name: "Project Tools / Integrations", code: "PROJTOOLS", group: "Client Project Costs" },
+      
+      // Finance & Legal
+      { name: "CA / Accounting Fees", code: "ACCOUNT", group: "Finance & Legal" },
+      { name: "Legal & Compliance", code: "LEGAL", group: "Finance & Legal" },
+      { name: "Bank Charges / Payment Gateway Fees", code: "BANKFEES", group: "Finance & Legal" },
+      { name: "Taxes & GST", code: "TAXES", group: "Finance & Legal" },
+      
+      // Travel & Communication
+      { name: "Travel (Local & Outstation)", code: "TRAVEL", group: "Travel & Communication" },
+      { name: "Fuel / Vehicle Maintenance", code: "FUEL", group: "Travel & Communication" },
+      { name: "Food & Meetings", code: "FOOD", group: "Travel & Communication" },
+      { name: "Phone Bills", code: "PHONE", group: "Travel & Communication" },
+      
+      // Miscellaneous
+      { name: "Contingency", code: "CONTING", group: "Miscellaneous" },
+      { name: "Refunds / Adjustments", code: "REFUNDS", group: "Miscellaneous" },
+      { name: "Donations / CSR", code: "CSR", group: "Miscellaneous" },
+    ];
+
+    const existingCategories = await db.collection("expenseCategories").find({}).toArray();
+    const existingCodes = new Set(existingCategories.map((c) => c.code?.toUpperCase()));
+
+    const categoriesToInsert = defaultCategories
+      .filter((cat) => !existingCodes.has(cat.code.toUpperCase()))
+      .map((cat) => ({
+        id: nanoid(),
+        ...cat,
+        status: "ACTIVE",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+
+    if (categoriesToInsert.length > 0) {
+      await db.collection("expenseCategories").insertMany(categoriesToInsert.map(toMongo));
+      console.log(`Seeded ${categoriesToInsert.length} default expense categories`);
+    } else {
+      console.log("All default expense categories already exist");
+    }
+
+    const totalCount = await db.collection("expenseCategories").countDocuments();
+    return { count: totalCount };
+  }
+
   // Expense methods
   async getExpenses(filters?: { 
     fromDate?: string;

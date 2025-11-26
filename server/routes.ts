@@ -684,6 +684,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/expense-categories/seed-defaults", authenticateToken, async (req, res) => {
+    try {
+      const result = await storage.seedDefaultExpenseCategories();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
   // ============================================
   // EXPENSE ROUTES
   // ============================================

@@ -27,12 +27,24 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Pencil, Building2, Save, Briefcase, Download, Trash2 } from "lucide-react";
+import { 
+  Plus, 
+  Pencil, 
+  Building2, 
+  Save, 
+  Briefcase, 
+  Download, 
+  Trash2,
+  Package,
+  Tags,
+  Settings2,
+} from "lucide-react";
 import { ServiceDialog } from "@/components/service-dialog";
 import { JobRoleDialog } from "@/components/job-role-dialog";
+import { ExpenseCategoryDialog } from "@/components/expense-category-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
-import type { Service, CompanyProfile, JobRole } from "@shared/schema";
+import type { Service, CompanyProfile, JobRole, ExpenseCategory } from "@shared/schema";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -46,10 +58,13 @@ export default function SettingsPage() {
   const [isServiceDialogOpen, setIsServiceDialogOpen] = useState(false);
   const [selectedJobRole, setSelectedJobRole] = useState<JobRole | null>(null);
   const [isJobRoleDialogOpen, setIsJobRoleDialogOpen] = useState(false);
+  const [selectedExpenseCategory, setSelectedExpenseCategory] = useState<ExpenseCategory | null>(null);
+  const [isExpenseCategoryDialogOpen, setIsExpenseCategoryDialogOpen] = useState(false);
   const [deletingService, setDeletingService] = useState<Service | null>(null);
   const [deletingJobRole, setDeletingJobRole] = useState<JobRole | null>(null);
+  const [deletingExpenseCategory, setDeletingExpenseCategory] = useState<ExpenseCategory | null>(null);
 
-  const { data: services, isLoading } = useQuery<Service[]>({
+  const { data: services, isLoading: isLoadingServices } = useQuery<Service[]>({
     queryKey: ["/api/services"],
   });
 
@@ -57,8 +72,13 @@ export default function SettingsPage() {
     queryKey: ["/api/job-roles"],
   });
 
+  const { data: expenseCategories = [], isLoading: isLoadingExpenseCategories } = useQuery<ExpenseCategory[]>({
+    queryKey: ["/api/expense-categories"],
+  });
+
   const { toast } = useToast();
 
+  // Service mutations
   const deleteServiceMutation = useMutation({
     mutationFn: async (id: string) => {
       return apiRequest("DELETE", `/api/services/${id}`);
@@ -73,6 +93,7 @@ export default function SettingsPage() {
     },
   });
 
+  // Job Role mutations
   const deleteJobRoleMutation = useMutation({
     mutationFn: async (id: string) => {
       return apiRequest("DELETE", `/api/job-roles/${id}`);
@@ -100,10 +121,35 @@ export default function SettingsPage() {
     },
   });
 
-  const handleSeedJobRoles = () => {
-    seedJobRolesMutation.mutate();
-  };
+  // Expense Category mutations
+  const deleteExpenseCategoryMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/expense-categories/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/expense-categories"] });
+      toast({ title: "Success", description: "Category deleted successfully" });
+      setDeletingExpenseCategory(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
 
+  const seedExpenseCategoriesMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/expense-categories/seed-defaults");
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/expense-categories"] });
+      toast({ title: "Success", description: `Categories loaded. Total: ${data.count} categories` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Service handlers
   const handleNewService = () => {
     setSelectedService(null);
     setIsServiceDialogOpen(true);
@@ -114,11 +160,7 @@ export default function SettingsPage() {
     setIsServiceDialogOpen(true);
   };
 
-  const handleCloseDialog = () => {
-    setIsServiceDialogOpen(false);
-    setSelectedService(null);
-  };
-
+  // Job Role handlers
   const handleNewJobRole = () => {
     setSelectedJobRole(null);
     setIsJobRoleDialogOpen(true);
@@ -129,9 +171,15 @@ export default function SettingsPage() {
     setIsJobRoleDialogOpen(true);
   };
 
-  const handleCloseJobRoleDialog = () => {
-    setIsJobRoleDialogOpen(false);
-    setSelectedJobRole(null);
+  // Expense Category handlers
+  const handleNewExpenseCategory = () => {
+    setSelectedExpenseCategory(null);
+    setIsExpenseCategoryDialogOpen(true);
+  };
+
+  const handleEditExpenseCategory = (category: ExpenseCategory) => {
+    setSelectedExpenseCategory(category);
+    setIsExpenseCategoryDialogOpen(true);
   };
 
   const getCategoryLabel = (category: string) => {
@@ -148,27 +196,57 @@ export default function SettingsPage() {
     return labels[category] || category;
   };
 
+  // Group expense categories by group
+  const groupedExpenseCategories = expenseCategories.reduce((acc, cat) => {
+    const group = (cat as any).group || "Uncategorized";
+    if (!acc[group]) acc[group] = [];
+    acc[group].push(cat);
+    return acc;
+  }, {} as Record<string, ExpenseCategory[]>);
+
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage your application settings and preferences
-        </p>
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      <div className="flex items-center gap-3">
+        <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+          <Settings2 className="h-5 w-5 text-primary" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+          <p className="text-muted-foreground">
+            Manage your application settings and preferences
+          </p>
+        </div>
       </div>
 
       <Tabs defaultValue="services" className="w-full">
-        <TabsList>
-          <TabsTrigger value="services" data-testid="tab-services">Services</TabsTrigger>
-          <TabsTrigger value="job-roles" data-testid="tab-job-roles">Job Roles</TabsTrigger>
-          <TabsTrigger value="company" data-testid="tab-company">Company Info</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-flex">
+          <TabsTrigger value="services" className="gap-2" data-testid="tab-services">
+            <Package className="h-4 w-4 hidden sm:inline" />
+            Services
+          </TabsTrigger>
+          <TabsTrigger value="expense-categories" className="gap-2" data-testid="tab-expense-categories">
+            <Tags className="h-4 w-4 hidden sm:inline" />
+            Expense Categories
+          </TabsTrigger>
+          <TabsTrigger value="job-roles" className="gap-2" data-testid="tab-job-roles">
+            <Briefcase className="h-4 w-4 hidden sm:inline" />
+            Job Roles
+          </TabsTrigger>
+          <TabsTrigger value="company" className="gap-2" data-testid="tab-company">
+            <Building2 className="h-4 w-4 hidden sm:inline" />
+            Company
+          </TabsTrigger>
         </TabsList>
 
+        {/* Services Tab */}
         <TabsContent value="services" className="space-y-4 mt-6">
-          <Card>
+          <Card className="border-0 shadow-sm">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Service Catalog</CardTitle>
+                <div>
+                  <CardTitle className="text-lg">Service Catalog</CardTitle>
+                  <CardDescription>Manage your agency's service offerings</CardDescription>
+                </div>
                 <Button onClick={handleNewService} data-testid="button-new-service">
                   <Plus className="h-4 w-4 mr-2" />
                   Add Service
@@ -176,88 +254,65 @@ export default function SettingsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {isLoading ? (
+              {isLoadingServices ? (
                 <div className="space-y-2">
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-14 w-full rounded-lg" />
+                  ))}
                 </div>
               ) : services && services.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Default Price</TableHead>
-                      <TableHead>Currency</TableHead>
-                      <TableHead>Unit</TableHead>
-                      <TableHead>Updated</TableHead>
-                      <TableHead className="w-20"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {services.map((service) => (
-                      <TableRow key={service.id} data-testid={`row-service-${service.id}`}>
-                        <TableCell className="font-medium" data-testid={`text-name-${service.id}`}>
-                          {service.name}
-                        </TableCell>
-                        <TableCell data-testid={`text-category-${service.id}`}>
-                          {getCategoryLabel(service.category)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={service.status === "ACTIVE" ? "bg-green-100 text-green-800 border-green-200" : "bg-gray-100 text-gray-800 border-gray-200"}
-                            data-testid={`badge-status-${service.id}`}
-                          >
-                            {service.status === "ACTIVE" ? "Active" : "Inactive"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-mono" data-testid={`text-price-${service.id}`}>
-                          {service.currency} {formatCurrency(service.defaultPrice)}
-                        </TableCell>
-                        <TableCell data-testid={`text-currency-${service.id}`}>
-                          {service.currency}
-                        </TableCell>
-                        <TableCell data-testid={`text-unit-${service.id}`}>
-                          {service.unit}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground" data-testid={`text-updated-${service.id}`}>
-                          {formatDate(service.updatedAt)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditService(service)}
-                              data-testid={`button-edit-${service.id}`}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => setDeletingService(service)}
-                              data-testid={`button-delete-${service.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
+                <div className="overflow-x-auto -mx-6">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="pl-6 text-xs uppercase tracking-wider">Name</TableHead>
+                        <TableHead className="text-xs uppercase tracking-wider">Category</TableHead>
+                        <TableHead className="text-xs uppercase tracking-wider">Status</TableHead>
+                        <TableHead className="text-right text-xs uppercase tracking-wider">Price</TableHead>
+                        <TableHead className="text-xs uppercase tracking-wider">Unit</TableHead>
+                        <TableHead className="pr-6 text-right text-xs uppercase tracking-wider">Actions</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {services.map((service) => (
+                        <TableRow key={service.id} className="hover:bg-muted/30" data-testid={`row-service-${service.id}`}>
+                          <TableCell className="pl-6 font-medium">{service.name}</TableCell>
+                          <TableCell className="text-muted-foreground">{getCategoryLabel(service.category)}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={service.status === "ACTIVE" 
+                                ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-400" 
+                                : "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-950/50 dark:text-gray-400"}
+                            >
+                              {service.status === "ACTIVE" ? "Active" : "Inactive"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm">
+                            {formatCurrency(service.defaultPrice)}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">{service.unit}</TableCell>
+                          <TableCell className="pr-6 text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditService(service)}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeletingService(service)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               ) : (
-                <div className="text-center py-12" data-testid="empty-state-services">
-                  <p className="text-muted-foreground">No services found</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Create your first service to get started
-                  </p>
-                  <Button onClick={handleNewService} className="mt-4" data-testid="button-create-first-service">
+                <div className="text-center py-12">
+                  <Package className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                  <p className="text-muted-foreground font-medium">No services found</p>
+                  <p className="text-sm text-muted-foreground/70 mt-1 mb-4">Create your first service to get started</p>
+                  <Button onClick={handleNewService}>
                     <Plus className="h-4 w-4 mr-2" />
                     Add Service
                   </Button>
@@ -267,132 +322,222 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="job-roles" className="space-y-4 mt-6">
-          <Card>
+        {/* Expense Categories Tab */}
+        <TabsContent value="expense-categories" className="space-y-4 mt-6">
+          <Card className="border-0 shadow-sm">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Briefcase className="h-5 w-5 text-primary" />
-                  <CardTitle>Job Roles</CardTitle>
+                <div>
+                  <CardTitle className="text-lg">Expense Categories</CardTitle>
+                  <CardDescription>Organize your expenses with custom categories</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button 
                     variant="outline" 
-                    onClick={handleSeedJobRoles}
-                    disabled={seedJobRolesMutation.isPending}
-                    data-testid="button-load-default-roles"
+                    onClick={() => seedExpenseCategoriesMutation.mutate()}
+                    disabled={seedExpenseCategoriesMutation.isPending}
+                    data-testid="button-load-default-categories"
                   >
                     <Download className="h-4 w-4 mr-2" />
-                    {seedJobRolesMutation.isPending ? "Loading..." : "Load Default Roles"}
+                    {seedExpenseCategoriesMutation.isPending ? "Loading..." : "Load Defaults"}
                   </Button>
-                  <Button onClick={handleNewJobRole} data-testid="button-new-job-role">
+                  <Button onClick={handleNewExpenseCategory} data-testid="button-new-expense-category">
                     <Plus className="h-4 w-4 mr-2" />
-                    Add Job Role
+                    Add Category
                   </Button>
                 </div>
               </div>
-              <CardDescription>
-                Manage job roles for team members. Click "Load Default Roles" to add common marketing agency roles.
-              </CardDescription>
             </CardHeader>
             <CardContent>
-              {isLoadingJobRoles ? (
+              {isLoadingExpenseCategories ? (
                 <div className="space-y-2">
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-14 w-full rounded-lg" />
+                  ))}
                 </div>
-              ) : jobRoles && jobRoles.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Updated</TableHead>
-                      <TableHead className="w-20"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {jobRoles.map((role) => (
-                      <TableRow key={role.id} data-testid={`row-job-role-${role.id}`}>
-                        <TableCell className="font-medium" data-testid={`text-title-${role.id}`}>
-                          {role.title}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground" data-testid={`text-description-${role.id}`}>
-                          {role.description || "-"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={role.status === "ACTIVE" ? "bg-green-100 text-green-800 border-green-200" : "bg-gray-100 text-gray-800 border-gray-200"}
-                            data-testid={`badge-status-${role.id}`}
+              ) : expenseCategories.length > 0 ? (
+                <div className="space-y-6">
+                  {Object.entries(groupedExpenseCategories).map(([group, categories]) => (
+                    <div key={group}>
+                      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-primary"></span>
+                        {group}
+                        <span className="text-xs font-normal normal-case">({categories.length})</span>
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {categories.map((category) => (
+                          <div 
+                            key={category.id}
+                            className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
                           >
-                            {role.status === "ACTIVE" ? "Active" : "Inactive"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground" data-testid={`text-updated-${role.id}`}>
-                          {formatDate(role.updatedAt)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditJobRole(role)}
-                              data-testid={`button-edit-${role.id}`}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => setDeletingJobRole(role)}
-                              data-testid={`button-delete-role-${role.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="flex-shrink-0">
+                                <Badge variant="secondary" className="font-mono text-xs">
+                                  {category.code}
+                                </Badge>
+                              </div>
+                              <span className="text-sm font-medium truncate">{category.name}</span>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditExpenseCategory(category)}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeletingExpenseCategory(category)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <div className="text-center py-12" data-testid="empty-state-job-roles">
-                  <Briefcase className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No job roles found</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Create job roles to use in team member profiles
+                <div className="text-center py-12">
+                  <Tags className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                  <p className="text-muted-foreground font-medium">No expense categories found</p>
+                  <p className="text-sm text-muted-foreground/70 mt-1 mb-4">
+                    Click "Load Defaults" to add standard agency expense categories
                   </p>
-                  <Button onClick={handleNewJobRole} className="mt-4" data-testid="button-create-first-job-role">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Job Role
-                  </Button>
+                  <div className="flex justify-center gap-2">
+                    <Button variant="outline" onClick={() => seedExpenseCategoriesMutation.mutate()}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Load Defaults
+                    </Button>
+                    <Button onClick={handleNewExpenseCategory}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Custom
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* Job Roles Tab */}
+        <TabsContent value="job-roles" className="space-y-4 mt-6">
+          <Card className="border-0 shadow-sm">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg">Job Roles</CardTitle>
+                  <CardDescription>Define job roles for team members</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => seedJobRolesMutation.mutate()}
+                    disabled={seedJobRolesMutation.isPending}
+                    data-testid="button-load-default-roles"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    {seedJobRolesMutation.isPending ? "Loading..." : "Load Defaults"}
+                  </Button>
+                  <Button onClick={handleNewJobRole} data-testid="button-new-job-role">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Role
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoadingJobRoles ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-14 w-full rounded-lg" />
+                  ))}
+                </div>
+              ) : jobRoles && jobRoles.length > 0 ? (
+                <div className="overflow-x-auto -mx-6">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="pl-6 text-xs uppercase tracking-wider">Title</TableHead>
+                        <TableHead className="text-xs uppercase tracking-wider">Description</TableHead>
+                        <TableHead className="text-xs uppercase tracking-wider">Status</TableHead>
+                        <TableHead className="pr-6 text-right text-xs uppercase tracking-wider">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {jobRoles.map((role) => (
+                        <TableRow key={role.id} className="hover:bg-muted/30" data-testid={`row-job-role-${role.id}`}>
+                          <TableCell className="pl-6 font-medium">{role.title}</TableCell>
+                          <TableCell className="text-muted-foreground max-w-xs truncate">{role.description || "-"}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={role.status === "ACTIVE" 
+                                ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-400" 
+                                : "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-950/50 dark:text-gray-400"}
+                            >
+                              {role.status === "ACTIVE" ? "Active" : "Inactive"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="pr-6 text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditJobRole(role)}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeletingJobRole(role)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Briefcase className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                  <p className="text-muted-foreground font-medium">No job roles found</p>
+                  <p className="text-sm text-muted-foreground/70 mt-1 mb-4">
+                    Click "Load Defaults" to add common marketing agency roles
+                  </p>
+                  <div className="flex justify-center gap-2">
+                    <Button variant="outline" onClick={() => seedJobRolesMutation.mutate()}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Load Defaults
+                    </Button>
+                    <Button onClick={handleNewJobRole}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Custom
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Company Tab */}
         <TabsContent value="company" className="space-y-4 mt-6">
           <CompanySettingsForm />
         </TabsContent>
       </Tabs>
 
+      {/* Dialogs */}
       <ServiceDialog
         service={selectedService}
         open={isServiceDialogOpen}
-        onClose={handleCloseDialog}
+        onClose={() => { setIsServiceDialogOpen(false); setSelectedService(null); }}
       />
 
       <JobRoleDialog
         role={selectedJobRole}
         open={isJobRoleDialogOpen}
-        onClose={handleCloseJobRoleDialog}
+        onClose={() => { setIsJobRoleDialogOpen(false); setSelectedJobRole(null); }}
       />
 
+      <ExpenseCategoryDialog
+        category={selectedExpenseCategory}
+        open={isExpenseCategoryDialogOpen}
+        onClose={() => { setIsExpenseCategoryDialogOpen(false); setSelectedExpenseCategory(null); }}
+      />
+
+      {/* Delete Confirmations */}
       <DeleteConfirmDialog
         open={!!deletingService}
         onOpenChange={(open) => !open && setDeletingService(null)}
@@ -409,6 +554,15 @@ export default function SettingsPage() {
         title="Delete Job Role"
         itemName={deletingJobRole?.title}
         isLoading={deleteJobRoleMutation.isPending}
+      />
+
+      <DeleteConfirmDialog
+        open={!!deletingExpenseCategory}
+        onOpenChange={(open) => !open && setDeletingExpenseCategory(null)}
+        onConfirm={() => deletingExpenseCategory && deleteExpenseCategoryMutation.mutate(deletingExpenseCategory.id)}
+        title="Delete Expense Category"
+        itemName={deletingExpenseCategory?.name}
+        isLoading={deleteExpenseCategoryMutation.isPending}
       />
     </div>
   );
@@ -480,7 +634,7 @@ function CompanySettingsForm() {
 
   if (isLoading) {
     return (
-      <Card>
+      <Card className="border-0 shadow-sm">
         <CardHeader>
           <CardTitle>Company Information</CardTitle>
         </CardHeader>
@@ -496,12 +650,9 @@ function CompanySettingsForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <Card>
+        <Card className="border-0 shadow-sm">
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-primary" />
-              <CardTitle>Company Information</CardTitle>
-            </div>
+            <CardTitle className="text-lg">Company Information</CardTitle>
             <CardDescription>
               Update your company details for invoices and official documents
             </CardDescription>
@@ -583,7 +734,7 @@ function CompanySettingsForm() {
                   <FormItem className="md:col-span-2">
                     <FormLabel>Company Name</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Acme Corporation" data-testid="input-company-name" />
+                      <Input {...field} placeholder="Acme Corporation" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -597,7 +748,7 @@ function CompanySettingsForm() {
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input {...field} type="email" placeholder="contact@company.com" data-testid="input-email" />
+                      <Input {...field} type="email" placeholder="contact@company.com" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -611,7 +762,7 @@ function CompanySettingsForm() {
                   <FormItem>
                     <FormLabel>Phone</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="+1 234 567 8900" data-testid="input-phone" />
+                      <Input {...field} placeholder="+1 234 567 8900" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -625,7 +776,7 @@ function CompanySettingsForm() {
                   <FormItem className="md:col-span-2">
                     <FormLabel>Address Line 1</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="123 Main Street" data-testid="input-address-1" />
+                      <Input {...field} placeholder="123 Main Street" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -639,7 +790,7 @@ function CompanySettingsForm() {
                   <FormItem className="md:col-span-2">
                     <FormLabel>Address Line 2</FormLabel>
                     <FormControl>
-                      <Input {...field} value={field.value || ""} placeholder="Suite 100" data-testid="input-address-2" />
+                      <Input {...field} value={field.value || ""} placeholder="Suite 100" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -653,7 +804,7 @@ function CompanySettingsForm() {
                   <FormItem>
                     <FormLabel>City</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="New York" data-testid="input-city" />
+                      <Input {...field} placeholder="New York" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -667,7 +818,7 @@ function CompanySettingsForm() {
                   <FormItem>
                     <FormLabel>State/Province</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="NY" data-testid="input-state" />
+                      <Input {...field} placeholder="NY" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -681,7 +832,7 @@ function CompanySettingsForm() {
                   <FormItem>
                     <FormLabel>Postal Code</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="10001" data-testid="input-postal" />
+                      <Input {...field} placeholder="10001" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -695,7 +846,7 @@ function CompanySettingsForm() {
                   <FormItem>
                     <FormLabel>Country</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="United States" data-testid="input-country" />
+                      <Input {...field} placeholder="India" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -709,7 +860,7 @@ function CompanySettingsForm() {
                   <FormItem className="md:col-span-2">
                     <FormLabel>Tax ID / GST Number</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="GST1234567890" data-testid="input-tax-id" />
+                      <Input {...field} placeholder="GST1234567890" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -719,9 +870,9 @@ function CompanySettingsForm() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-0 shadow-sm">
           <CardHeader>
-            <CardTitle>Banking Details</CardTitle>
+            <CardTitle className="text-lg">Banking Details</CardTitle>
             <CardDescription>Bank account information for invoice payments</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -733,7 +884,7 @@ function CompanySettingsForm() {
                   <FormItem className="md:col-span-2">
                     <FormLabel>Bank Name</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="HDFC Bank" data-testid="input-bank-name" />
+                      <Input {...field} placeholder="HDFC Bank" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -747,7 +898,7 @@ function CompanySettingsForm() {
                   <FormItem>
                     <FormLabel>Account Number</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="50200012345678" data-testid="input-account-number" />
+                      <Input {...field} placeholder="50200012345678" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -761,7 +912,7 @@ function CompanySettingsForm() {
                   <FormItem>
                     <FormLabel>IFSC / Swift Code</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="HDFC0001234" data-testid="input-ifsc" />
+                      <Input {...field} placeholder="HDFC0001234" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -775,7 +926,7 @@ function CompanySettingsForm() {
                   <FormItem className="md:col-span-2">
                     <FormLabel>Account Holder Name</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="John Doe / Company Name" data-testid="input-account-holder" />
+                      <Input {...field} placeholder="John Doe / Company Name" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -785,10 +936,10 @@ function CompanySettingsForm() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-0 shadow-sm">
           <CardHeader>
-            <CardTitle>UPI & Online Payment</CardTitle>
-            <CardDescription>UPI ID and payment links for quick payments. QR code will be auto-generated on invoices.</CardDescription>
+            <CardTitle className="text-lg">UPI & Online Payment</CardTitle>
+            <CardDescription>UPI ID and payment links for quick payments</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -799,12 +950,10 @@ function CompanySettingsForm() {
                   <FormItem>
                     <FormLabel>UPI ID</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="yourname@upi or 9876543210@paytm" data-testid="input-upi-id" />
+                      <Input {...field} placeholder="yourname@upi" />
                     </FormControl>
                     <FormMessage />
-                    <p className="text-xs text-muted-foreground">
-                      A QR code will be generated automatically on invoices
-                    </p>
+                    <p className="text-xs text-muted-foreground">QR code auto-generated on invoices</p>
                   </FormItem>
                 )}
               />
@@ -816,12 +965,9 @@ function CompanySettingsForm() {
                   <FormItem>
                     <FormLabel>Payment Link (Optional)</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="https://razorpay.me/yourcompany" data-testid="input-payment-link" />
+                      <Input {...field} placeholder="https://razorpay.me/yourcompany" />
                     </FormControl>
                     <FormMessage />
-                    <p className="text-xs text-muted-foreground">
-                      Razorpay, PayPal, or any payment gateway link
-                    </p>
                   </FormItem>
                 )}
               />
@@ -833,12 +979,7 @@ function CompanySettingsForm() {
                   <FormItem className="md:col-span-2">
                     <FormLabel>Additional Payment Instructions</FormLabel>
                     <FormControl>
-                      <Textarea
-                        {...field}
-                        value={field.value || ""}
-                        placeholder="Optional payment gateway information, fees, or special instructions"
-                        data-testid="input-gateway-details"
-                      />
+                      <Textarea {...field} value={field.value || ""} placeholder="Optional payment gateway information" rows={2} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -848,9 +989,9 @@ function CompanySettingsForm() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-0 shadow-sm">
           <CardHeader>
-            <CardTitle>Invoice Settings</CardTitle>
+            <CardTitle className="text-lg">Invoice Settings</CardTitle>
             <CardDescription>Default terms and notes for invoices</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -861,13 +1002,7 @@ function CompanySettingsForm() {
                 <FormItem>
                   <FormLabel>Invoice Terms & Conditions</FormLabel>
                   <FormControl>
-                    <Textarea
-                      {...field}
-                      value={field.value || ""}
-                      placeholder="Payment terms, late fees, etc."
-                      rows={6}
-                      data-testid="input-invoice-terms"
-                    />
+                    <Textarea {...field} value={field.value || ""} placeholder="Payment terms, late fees, etc." rows={5} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -881,13 +1016,7 @@ function CompanySettingsForm() {
                 <FormItem>
                   <FormLabel>Payment Notes</FormLabel>
                   <FormControl>
-                    <Textarea
-                      {...field}
-                      value={field.value || ""}
-                      placeholder="Thank you notes or additional payment instructions"
-                      rows={3}
-                      data-testid="input-payment-notes"
-                    />
+                    <Textarea {...field} value={field.value || ""} placeholder="Thank you notes" rows={2} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -896,10 +1025,10 @@ function CompanySettingsForm() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-0 shadow-sm">
           <CardHeader>
-            <CardTitle>Authorized Signatory</CardTitle>
-            <CardDescription>Person authorized to sign invoices and documents</CardDescription>
+            <CardTitle className="text-lg">Authorized Signatory</CardTitle>
+            <CardDescription>Person authorized to sign invoices</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -910,7 +1039,7 @@ function CompanySettingsForm() {
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="John Doe" data-testid="input-signatory-name" />
+                      <Input {...field} placeholder="John Doe" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -924,7 +1053,7 @@ function CompanySettingsForm() {
                   <FormItem>
                     <FormLabel>Title</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Proprietor" data-testid="input-signatory-title" />
+                      <Input {...field} placeholder="Proprietor" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -935,7 +1064,7 @@ function CompanySettingsForm() {
         </Card>
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={updateMutation.isPending} data-testid="button-save-company">
+          <Button type="submit" disabled={updateMutation.isPending}>
             <Save className="h-4 w-4 mr-2" />
             {updateMutation.isPending ? "Saving..." : "Save Changes"}
           </Button>
