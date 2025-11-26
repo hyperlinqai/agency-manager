@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { ArrowLeft, Plus, Trash2, Package } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Package, UserPlus } from "lucide-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import {
@@ -42,6 +42,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
+import { QuickClientDialog } from "@/components/quick-client-dialog";
 import type { Client, Project, Service } from "@shared/schema";
 
 const invoiceFormSchema = z.object({
@@ -68,6 +69,7 @@ export default function InvoiceCreatePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [servicePopoverOpen, setServicePopoverOpen] = useState(false);
+  const [showQuickClient, setShowQuickClient] = useState(false);
   const urlParams = new URLSearchParams(window.location.search);
   const preSelectedClientId = urlParams.get("clientId");
 
@@ -220,7 +222,19 @@ export default function InvoiceCreatePage() {
                   name="clientId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Client *</FormLabel>
+                      <div className="flex items-center justify-between">
+                        <FormLabel>Client *</FormLabel>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs text-primary"
+                          onClick={() => setShowQuickClient(true)}
+                        >
+                          <UserPlus className="h-3 w-3 mr-1" />
+                          Add New
+                        </Button>
+                      </div>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-client">
@@ -581,6 +595,15 @@ export default function InvoiceCreatePage() {
           </div>
         </form>
       </Form>
+
+      <QuickClientDialog
+        open={showQuickClient}
+        onClose={() => setShowQuickClient(false)}
+        onClientCreated={(clientId) => {
+          form.setValue("clientId", clientId);
+          setShowQuickClient(false);
+        }}
+      />
     </div>
   );
 }
