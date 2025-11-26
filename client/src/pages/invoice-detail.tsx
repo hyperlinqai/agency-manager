@@ -78,20 +78,65 @@ export default function InvoiceDetailPage() {
   // Convert logo URL to base64 for PDF rendering
   useEffect(() => {
     const convertLogoToBase64 = async () => {
-      if (companyProfile?.logoUrl) {
-        try {
-          const response = await fetch(companyProfile.logoUrl);
-          const blob = await response.blob();
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            setLogoBase64(reader.result as string);
-          };
-          reader.readAsDataURL(blob);
-        } catch (error) {
-          console.error("Failed to convert logo to base64:", error);
-        }
+      if (!companyProfile?.logoUrl) return;
+      
+      const logoUrl = companyProfile.logoUrl;
+      
+      // If already a data URL, use it directly
+      if (logoUrl.startsWith('data:')) {
+        setLogoBase64(logoUrl);
+        return;
+      }
+      
+      try {
+        // Use Image element to handle CORS and convert to base64
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0);
+              const dataUrl = canvas.toDataURL('image/png');
+              setLogoBase64(dataUrl);
+            }
+          } catch (canvasError) {
+            console.error("Canvas conversion failed:", canvasError);
+            // Fallback: try fetch method
+            fetchLogoAsBase64(logoUrl);
+          }
+        };
+        
+        img.onerror = () => {
+          console.error("Image load failed, trying fetch method");
+          fetchLogoAsBase64(logoUrl);
+        };
+        
+        img.src = logoUrl;
+      } catch (error) {
+        console.error("Failed to convert logo to base64:", error);
       }
     };
+    
+    const fetchLogoAsBase64 = async (url: string) => {
+      try {
+        const response = await fetch(url, { mode: 'cors' });
+        if (!response.ok) throw new Error('Fetch failed');
+        const blob = await response.blob();
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setLogoBase64(reader.result as string);
+        };
+        reader.readAsDataURL(blob);
+      } catch (err) {
+        console.error("Fetch logo failed:", err);
+      }
+    };
+    
     convertLogoToBase64();
   }, [companyProfile?.logoUrl]);
   
