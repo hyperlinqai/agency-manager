@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Users, DollarSign, Trash2 } from "lucide-react";
+import { Plus, Users, DollarSign, Trash2, UserPlus } from "lucide-react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -136,6 +137,12 @@ export default function TeamSalariesPage() {
             Manage team members and salary payments
           </p>
         </div>
+        <Link href="/employee-onboarding">
+          <Button variant="outline" data-testid="button-employee-onboarding">
+            <UserPlus className="h-4 w-4 mr-2" />
+            Onboard Employee
+          </Button>
+        </Link>
       </div>
 
       <Tabs defaultValue="team" className="w-full">

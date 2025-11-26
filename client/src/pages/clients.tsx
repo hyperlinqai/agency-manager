@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Search, Users, ChevronRight } from "lucide-react";
+import { Plus, Search, Users, ChevronRight, UserPlus } from "lucide-react";
 import { ClientDialog } from "@/components/client-dialog";
 import type { ClientWithStats } from "@shared/schema";
 import { formatCurrency } from "@/lib/utils";
@@ -46,10 +46,18 @@ export default function ClientsPage() {
             Manage your agency's client relationships
           </p>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)} data-testid="button-new-client">
-          <Plus className="h-4 w-4 mr-2" />
-          New Client
-        </Button>
+        <div className="flex gap-2">
+          <Link href="/client-onboarding">
+            <Button variant="outline" data-testid="button-client-onboarding">
+              <UserPlus className="h-4 w-4 mr-2" />
+              Onboard Client
+            </Button>
+          </Link>
+          <Button onClick={() => setIsDialogOpen(true)} data-testid="button-new-client">
+            <Plus className="h-4 w-4 mr-2" />
+            Quick Add
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

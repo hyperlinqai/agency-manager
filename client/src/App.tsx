@@ -12,12 +12,14 @@ import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
 import ClientsPage from "@/pages/clients";
 import ClientDetailPage from "@/pages/client-detail";
+import ClientOnboardingPage from "@/pages/client-onboarding";
 import InvoicesPage from "@/pages/invoices";
 import InvoiceCreatePage from "@/pages/invoice-create";
 import InvoiceDetailPage from "@/pages/invoice-detail";
 import VendorsPage from "@/pages/vendors";
 import ExpensesPage from "@/pages/expenses";
 import TeamSalariesPage from "@/pages/team-salaries";
+import EmployeeOnboardingPage from "@/pages/employee-onboarding";
 import SettingsPage from "@/pages/settings";
 
 function Router() {
@@ -41,6 +43,13 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <ClientDetailPage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/client-onboarding">
+        {() => (
+          <ProtectedRoute>
+            <ClientOnboardingPage />
           </ProtectedRoute>
         )}
       </Route>
@@ -83,6 +92,13 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <TeamSalariesPage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/employee-onboarding">
+        {() => (
+          <ProtectedRoute>
+            <EmployeeOnboardingPage />
           </ProtectedRoute>
         )}
       </Route>
