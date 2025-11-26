@@ -3,99 +3,106 @@ import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/render
 import type { InvoiceWithRelations, CompanyProfile, Payment } from "@shared/schema";
 import { formatDate } from "@/lib/utils";
 
+// Helper function to parse terms and conditions into numbered lines
+const parseTermsIntoLines = (terms: string): string[] => {
+  // Split by common patterns: "1.", "1)", "1:", or newlines followed by numbers
+  const lines = terms.split(/(?=\d+[\.\)\:])|[\n\r]+/).filter(line => line.trim());
+  return lines.map(line => line.trim()).filter(Boolean);
+};
+
 // Define styles matching the HTML invoice view design
 const styles = StyleSheet.create({
   page: {
     padding: 0,
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: "Helvetica",
     backgroundColor: "#f9fafb",
   },
   // Main container
   container: {
-    margin: 30,
+    margin: 20,
     backgroundColor: "#FFFFFF",
-    borderRadius: 8,
+    borderRadius: 6,
   },
   // Header section with gradient-like teal background
   header: {
     backgroundColor: "#0d9488",
-    padding: 24,
+    padding: 16,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
   },
   logoContainer: {
-    width: 56,
-    height: 56,
+    width: 44,
+    height: 44,
     backgroundColor: "#FFFFFF",
-    borderRadius: 8,
+    borderRadius: 6,
     justifyContent: "center",
     alignItems: "center",
-    padding: 4,
+    padding: 3,
   },
   logoImage: {
-    width: 48,
-    height: 48,
+    width: 38,
+    height: 38,
     objectFit: "contain",
-    borderRadius: 6,
+    borderRadius: 4,
   },
   logoPlaceholder: {
-    width: 56,
-    height: 56,
+    width: 44,
+    height: 44,
     backgroundColor: "rgba(255,255,255,0.2)",
-    borderRadius: 8,
+    borderRadius: 6,
     justifyContent: "center",
     alignItems: "center",
   },
   logoLetter: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "bold",
     color: "#FFFFFF",
   },
   companyInfo: {
-    marginLeft: 12,
+    marginLeft: 10,
   },
   companyName: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: "bold",
     color: "#FFFFFF",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   companyTagline: {
-    fontSize: 10,
+    fontSize: 8,
     color: "#ccfbf1",
   },
   invoiceLabelBox: {
     backgroundColor: "rgba(255,255,255,0.2)",
-    borderRadius: 6,
-    padding: 10,
+    borderRadius: 4,
+    padding: 8,
     alignItems: "flex-end",
   },
   invoiceLabelText: {
-    fontSize: 8,
+    fontSize: 7,
     color: "#ccfbf1",
     textTransform: "uppercase",
     letterSpacing: 1,
     marginBottom: 2,
   },
   invoiceNumber: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "bold",
     color: "#FFFFFF",
   },
   // Meta row (phone, email, date)
   metaRow: {
     backgroundColor: "#f9fafb",
-    padding: 16,
-    paddingHorizontal: 24,
+    padding: 10,
+    paddingHorizontal: 16,
     flexDirection: "row",
     justifyContent: "space-between",
     borderBottomWidth: 1,
@@ -103,19 +110,19 @@ const styles = StyleSheet.create({
   },
   metaLeft: {
     flexDirection: "row",
-    gap: 20,
+    gap: 16,
   },
   metaItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
   },
   metaText: {
-    fontSize: 9,
+    fontSize: 8,
     color: "#4b5563",
   },
   metaDate: {
-    fontSize: 9,
+    fontSize: 8,
     color: "#4b5563",
   },
   metaDateLabel: {
@@ -125,92 +132,92 @@ const styles = StyleSheet.create({
   // Bill To & Payment Info columns
   infoColumns: {
     flexDirection: "row",
-    padding: 24,
-    gap: 20,
+    padding: 16,
+    gap: 16,
   },
   infoBox: {
     flex: 1,
     backgroundColor: "#f9fafb",
-    borderRadius: 8,
-    padding: 16,
+    borderRadius: 6,
+    padding: 12,
     borderWidth: 1,
     borderColor: "#f3f4f6",
   },
   infoBoxHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
-    gap: 6,
+    marginBottom: 8,
+    gap: 5,
   },
   infoBoxIndicator: {
-    width: 3,
-    height: 16,
+    width: 2,
+    height: 12,
     backgroundColor: "#14b8a6",
-    borderRadius: 2,
+    borderRadius: 1,
   },
   infoBoxTitle: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "bold",
     color: "#6b7280",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   infoBoxContent: {
-    gap: 6,
+    gap: 4,
   },
   infoName: {
-    fontSize: 11,
+    fontSize: 8,
     fontWeight: "bold",
     color: "#111827",
     marginBottom: 2,
   },
   infoText: {
-    fontSize: 9,
+    fontSize: 8,
     color: "#4b5563",
-    lineHeight: 1.4,
+    lineHeight: 1.3,
   },
   infoTextBrand: {
-    fontSize: 9,
+    fontSize: 8,
     color: "#0d9488",
   },
   paymentRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 4,
+    marginBottom: 3,
   },
   paymentLabel: {
-    fontSize: 9,
+    fontSize: 8,
     color: "#6b7280",
   },
   paymentValue: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "bold",
     color: "#111827",
   },
   paymentValueMono: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "bold",
     color: "#111827",
     fontFamily: "Courier",
   },
   // Line Items Table
   tableContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
   },
   table: {
     borderWidth: 1,
     borderColor: "#e5e7eb",
-    borderRadius: 8,
+    borderRadius: 6,
     overflow: "hidden",
   },
   tableHeader: {
     flexDirection: "row",
     backgroundColor: "#0d9488",
-    padding: 12,
+    padding: 8,
   },
   tableHeaderText: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "bold",
     color: "#FFFFFF",
     textTransform: "uppercase",
@@ -218,7 +225,7 @@ const styles = StyleSheet.create({
   },
   tableRow: {
     flexDirection: "row",
-    padding: 12,
+    padding: 8,
     borderBottomWidth: 1,
     borderBottomColor: "#f3f4f6",
   },
@@ -230,29 +237,29 @@ const styles = StyleSheet.create({
   colUnitPrice: { flex: 2, alignItems: "flex-end" },
   colAmount: { flex: 2, alignItems: "flex-end" },
   tableCell: {
-    fontSize: 9,
+    fontSize: 8,
     color: "#111827",
   },
   tableCellMuted: {
-    fontSize: 9,
+    fontSize: 8,
     color: "#4b5563",
   },
   tableCellBold: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "bold",
     color: "#111827",
     fontFamily: "Courier",
   },
   // Totals Section
   totalsContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     alignItems: "flex-end",
   },
   totalsBox: {
-    width: 220,
+    width: 180,
     backgroundColor: "#f9fafb",
-    borderRadius: 8,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: "#e5e7eb",
     overflow: "hidden",
@@ -260,51 +267,80 @@ const styles = StyleSheet.create({
   totalsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    padding: 12,
+    padding: 8,
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
   },
+  totalsRowHighlight: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+    backgroundColor: "#f3f4f6",
+  },
   totalsLabel: {
-    fontSize: 9,
+    fontSize: 7,
     color: "#6b7280",
   },
+  totalsLabelBold: {
+    fontSize: 7,
+    fontWeight: "bold",
+    color: "#374151",
+  },
+  totalsLabelGreen: {
+    fontSize: 7,
+    color: "#059669",
+  },
   totalsValue: {
-    fontSize: 9,
+    fontSize: 7,
     fontWeight: "bold",
     color: "#111827",
+    fontFamily: "Courier",
+  },
+  totalsValueBold: {
+    fontSize: 7,
+    fontWeight: "bold",
+    color: "#111827",
+    fontFamily: "Courier",
+  },
+  totalsValueGreen: {
+    fontSize: 7,
+    fontWeight: "bold",
+    color: "#059669",
     fontFamily: "Courier",
   },
   grandTotalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    padding: 14,
+    padding: 10,
     backgroundColor: "#0d9488",
   },
   grandTotalLabel: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "bold",
     color: "#FFFFFF",
   },
   grandTotalValue: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "bold",
     color: "#FFFFFF",
     fontFamily: "Courier",
   },
   // Amount in Words
   amountInWordsContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
   },
   amountInWordsBox: {
     backgroundColor: "#f0fdfa",
-    borderRadius: 6,
-    padding: 12,
+    borderRadius: 4,
+    padding: 8,
     borderWidth: 1,
     borderColor: "#ccfbf1",
   },
   amountInWordsText: {
-    fontSize: 9,
+    fontSize: 7,
     color: "#0f766e",
   },
   amountInWordsLabel: {
@@ -312,28 +348,28 @@ const styles = StyleSheet.create({
   },
   // Notes Section
   notesContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
   },
   notesBox: {
     backgroundColor: "#fffbeb",
-    borderRadius: 8,
-    padding: 16,
+    borderRadius: 6,
+    padding: 10,
     borderWidth: 1,
     borderColor: "#fef3c7",
     flexDirection: "row",
     gap: 10,
   },
   notesIcon: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: "#fbbf24",
     justifyContent: "center",
     alignItems: "center",
   },
   notesIconText: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "bold",
     color: "#FFFFFF",
   },
@@ -341,114 +377,150 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   notesTitle: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "bold",
     color: "#92400e",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   notesText: {
-    fontSize: 9,
+    fontSize: 7,
     color: "#b45309",
-    lineHeight: 1.5,
+    lineHeight: 1.4,
   },
   // Terms Section
   termsContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
   },
   termsBox: {
     backgroundColor: "#f9fafb",
-    borderRadius: 8,
-    padding: 16,
+    borderRadius: 6,
+    padding: 10,
     borderWidth: 1,
     borderColor: "#f3f4f6",
   },
   termsTitle: {
-    fontSize: 8,
+    fontSize: 6,
     fontWeight: "bold",
     color: "#6b7280",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   termsText: {
-    fontSize: 9,
+    fontSize: 6,
     color: "#4b5563",
-    lineHeight: 1.5,
+    lineHeight: 1.3,
+  },
+  termsItem: {
+    fontSize: 6,
+    color: "#4b5563",
+    lineHeight: 1.3,
+    marginBottom: 2,
   },
   // Footer Section (QR & Signature)
   footerSection: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
     backgroundColor: "#f9fafb",
     borderTopWidth: 1,
     borderTopColor: "#f3f4f6",
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-end",
+    alignItems: "flex-start",
+    minHeight: 100,
   },
   qrSection: {
     alignItems: "flex-start",
+    maxWidth: 140,
   },
   qrTitle: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "bold",
     color: "#6b7280",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   qrBox: {
-    width: 70,
-    height: 70,
+    width: 60,
+    height: 60,
     backgroundColor: "#FFFFFF",
     borderRadius: 6,
-    borderWidth: 2,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 4,
+  },
+  qrImage: {
+    width: 52,
+    height: 52,
+  },
+  qrPlaceholderBox: {
+    width: 60,
+    height: 60,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 4,
+    borderWidth: 1,
     borderColor: "#e5e7eb",
     borderStyle: "dashed",
     justifyContent: "center",
     alignItems: "center",
   },
   qrPlaceholderText: {
-    fontSize: 8,
+    fontSize: 6,
     color: "#9ca3af",
+  },
+  upiIdText: {
+    fontSize: 6,
+    color: "#0d9488",
     marginTop: 4,
+    maxWidth: 120,
+  },
+  paymentLinkText: {
+    fontSize: 6,
+    color: "#6b7280",
+    marginTop: 2,
+    maxWidth: 120,
   },
   signatureSection: {
     alignItems: "flex-end",
+    minWidth: 120,
   },
   signatureLine: {
-    width: 150,
-    height: 40,
-    borderBottomWidth: 2,
+    width: 100,
+    height: 30,
+    borderBottomWidth: 1,
     borderBottomColor: "#9ca3af",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   signatureName: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "bold",
     color: "#111827",
-    marginBottom: 2,
+    marginBottom: 1,
   },
   signatureTitle: {
-    fontSize: 8,
+    fontSize: 7,
     color: "#6b7280",
-    marginBottom: 2,
+    marginBottom: 1,
   },
   signatureDate: {
-    fontSize: 8,
+    fontSize: 6,
     color: "#9ca3af",
   },
   // Footer Branding
   brandingFooter: {
     backgroundColor: "#111827",
-    padding: 14,
+    padding: 10,
     alignItems: "center",
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
   },
   brandingText: {
-    fontSize: 8,
+    fontSize: 7,
     color: "#9ca3af",
   },
   brandingHighlight: {
@@ -463,6 +535,8 @@ interface InvoicePDFProps {
   clientAddress?: string;
   clientEmail?: string;
   payments?: Payment[];
+  upiQrCode?: string; // Base64 data URL for UPI QR code
+  logoBase64?: string; // Base64 data URL for company logo
 }
 
 // Helper to convert number to words
@@ -515,13 +589,15 @@ function numberToWords(num: number): string {
   return result + ' Only';
 }
 
-export function InvoicePDF({ invoice, companyProfile, clientAddress, clientEmail, payments }: InvoicePDFProps) {
+export function InvoicePDF({ invoice, companyProfile, clientAddress, clientEmail, payments, upiQrCode, logoBase64 }: InvoicePDFProps) {
+  // Simple currency formatter without symbol issues in PDF
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: invoice.currency || "INR",
+    const formatted = new Intl.NumberFormat("en-IN", {
       minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(amount);
+    // Use Rs. instead of ₹ symbol to avoid PDF rendering issues
+    return `Rs. ${formatted}`;
   };
 
   // Calculate tax rate from invoice data
@@ -538,7 +614,11 @@ export function InvoicePDF({ invoice, companyProfile, clientAddress, clientEmail
           {/* Header Section */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
-              {companyProfile?.logoUrl ? (
+              {logoBase64 ? (
+                <View style={styles.logoContainer}>
+                  <Image style={styles.logoImage} src={logoBase64} />
+                </View>
+              ) : companyProfile?.logoUrl ? (
                 <View style={styles.logoContainer}>
                   <Image style={styles.logoImage} src={companyProfile.logoUrl} />
                 </View>
@@ -685,19 +765,29 @@ export function InvoicePDF({ invoice, companyProfile, clientAddress, clientEmail
                 <Text style={styles.totalsLabel}>Tax ({taxRate}%)</Text>
                 <Text style={styles.totalsValue}>{formatCurrency(invoice.taxAmount)}</Text>
               </View>
+              <View style={styles.totalsRowHighlight}>
+                <Text style={styles.totalsLabelBold}>Grand Total</Text>
+                <Text style={styles.totalsValueBold}>{formatCurrency(invoice.totalAmount)}</Text>
+              </View>
+              {invoice.amountPaid > 0 && (
+                <View style={styles.totalsRow}>
+                  <Text style={styles.totalsLabelGreen}>Amount Paid</Text>
+                  <Text style={styles.totalsValueGreen}>- {formatCurrency(invoice.amountPaid)}</Text>
+                </View>
+              )}
               <View style={styles.grandTotalRow}>
-                <Text style={styles.grandTotalLabel}>Grand Total</Text>
-                <Text style={styles.grandTotalValue}>{formatCurrency(invoice.totalAmount)}</Text>
+                <Text style={styles.grandTotalLabel}>Balance Due</Text>
+                <Text style={styles.grandTotalValue}>{formatCurrency(invoice.balanceDue)}</Text>
               </View>
             </View>
           </View>
 
-          {/* Amount in Words */}
+          {/* Amount in Words (Balance Due) */}
           <View style={styles.amountInWordsContainer}>
             <View style={styles.amountInWordsBox}>
               <Text style={styles.amountInWordsText}>
-                <Text style={styles.amountInWordsLabel}>Amount in words: </Text>
-                {amountInWords}
+                <Text style={styles.amountInWordsLabel}>Balance due in words: </Text>
+                {numberToWords(invoice.balanceDue)}
               </Text>
             </View>
           </View>
@@ -722,7 +812,9 @@ export function InvoicePDF({ invoice, companyProfile, clientAddress, clientEmail
             <View style={styles.termsContainer}>
               <View style={styles.termsBox}>
                 <Text style={styles.termsTitle}>Terms & Conditions</Text>
-                <Text style={styles.termsText}>{companyProfile.invoiceTerms}</Text>
+                {parseTermsIntoLines(companyProfile.invoiceTerms).map((line, index) => (
+                  <Text key={index} style={styles.termsItem}>{line}</Text>
+                ))}
               </View>
             </View>
           )}
@@ -731,9 +823,30 @@ export function InvoicePDF({ invoice, companyProfile, clientAddress, clientEmail
           <View style={styles.footerSection}>
             <View style={styles.qrSection}>
               <Text style={styles.qrTitle}>Scan to Pay</Text>
-              <View style={styles.qrBox}>
-                <Text style={styles.qrPlaceholderText}>QR Code</Text>
-              </View>
+              {upiQrCode ? (
+                <>
+                  <View style={styles.qrBox}>
+                    <Image style={styles.qrImage} src={upiQrCode} />
+                  </View>
+                  {companyProfile?.upiId && (
+                    <Text style={styles.upiIdText}>UPI: {companyProfile.upiId}</Text>
+                  )}
+                  {companyProfile?.paymentLink && (
+                    <Text style={styles.paymentLinkText}>Or pay online</Text>
+                  )}
+                </>
+              ) : companyProfile?.upiId ? (
+                <>
+                  <View style={styles.qrPlaceholderBox}>
+                    <Text style={styles.qrPlaceholderText}>UPI QR</Text>
+                  </View>
+                  <Text style={styles.upiIdText}>UPI: {companyProfile.upiId}</Text>
+                </>
+              ) : (
+                <View style={styles.qrPlaceholderBox}>
+                  <Text style={styles.qrPlaceholderText}>No UPI</Text>
+                </View>
+              )}
             </View>
             <View style={styles.signatureSection}>
               <View style={styles.signatureLine} />

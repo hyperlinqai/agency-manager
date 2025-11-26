@@ -368,6 +368,9 @@ function CompanySettingsForm() {
       bankName: "",
       bankAccountNumber: "",
       bankIfscCode: "",
+      bankAccountHolderName: "",
+      upiId: "",
+      paymentLink: "",
       paymentGatewayDetails: "",
       invoiceTerms: "",
       paymentNotes: "",
@@ -696,15 +699,73 @@ function CompanySettingsForm() {
 
               <FormField
                 control={form.control}
+                name="bankAccountHolderName"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Account Holder Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="John Doe / Company Name" data-testid="input-account-holder" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>UPI & Online Payment</CardTitle>
+            <CardDescription>UPI ID and payment links for quick payments. QR code will be auto-generated on invoices.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="upiId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>UPI ID</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="yourname@upi or 9876543210@paytm" data-testid="input-upi-id" />
+                    </FormControl>
+                    <FormMessage />
+                    <p className="text-xs text-muted-foreground">
+                      A QR code will be generated automatically on invoices
+                    </p>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="paymentLink"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Payment Link (Optional)</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="https://razorpay.me/yourcompany" data-testid="input-payment-link" />
+                    </FormControl>
+                    <FormMessage />
+                    <p className="text-xs text-muted-foreground">
+                      Razorpay, PayPal, or any payment gateway link
+                    </p>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="paymentGatewayDetails"
                 render={({ field }) => (
                   <FormItem className="md:col-span-2">
-                    <FormLabel>Payment Gateway Details</FormLabel>
+                    <FormLabel>Additional Payment Instructions</FormLabel>
                     <FormControl>
                       <Textarea
                         {...field}
                         value={field.value || ""}
-                        placeholder="Optional payment gateway information or fees"
+                        placeholder="Optional payment gateway information, fees, or special instructions"
                         data-testid="input-gateway-details"
                       />
                     </FormControl>

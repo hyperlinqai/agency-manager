@@ -487,6 +487,9 @@ export interface CompanyProfile {
   bankName: string;
   bankAccountNumber: string;
   bankIfscCode: string;
+  bankAccountHolderName: string;
+  upiId: string;
+  paymentLink: string;
   paymentGatewayDetails: string;
   invoiceTerms: string;
   paymentNotes: string;
@@ -511,6 +514,9 @@ export const insertCompanyProfileSchema = z.object({
   bankName: z.string().optional().default(""),
   bankAccountNumber: z.string().optional().default(""),
   bankIfscCode: z.string().optional().default(""),
+  bankAccountHolderName: z.string().optional().default(""),
+  upiId: z.string().optional().default(""),
+  paymentLink: z.string().optional().default(""),
   paymentGatewayDetails: z.string().optional().default(""),
   invoiceTerms: z.string().optional().default(""),
   paymentNotes: z.string().optional().default(""),

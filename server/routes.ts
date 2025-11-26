@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { ToWords } from "to-words";
+import QRCode from "qrcode";
 import {
   insertClientSchema,
   insertProjectSchema,
@@ -322,6 +323,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? ((invoice.taxAmount / invoice.subtotal) * 100).toFixed(0)
         : "0";
 
+      // Generate UPI QR code if UPI ID is available
+      let qrCodeDataUrl: string | null = null;
+      if (companyProfile?.upiId) {
+        try {
+          const upiParams = new URLSearchParams();
+          upiParams.set("pa", companyProfile.upiId);
+          upiParams.set("pn", companyProfile.companyName || "Company");
+          upiParams.set("am", invoice.balanceDue > 0 ? invoice.balanceDue.toFixed(2) : invoice.totalAmount.toFixed(2));
+          upiParams.set("tn", `Payment for Invoice ${invoice.invoiceNumber}`);
+          upiParams.set("cu", "INR");
+          const upiUrl = `upi://pay?${upiParams.toString()}`;
+          
+          qrCodeDataUrl = await QRCode.toDataURL(upiUrl, {
+            width: 150,
+            margin: 1,
+            errorCorrectionLevel: "M",
+          });
+        } catch (qrError) {
+          console.error("Error generating QR code:", qrError);
+        }
+      }
+
       // Build the data object for EJS template
       const templateData = {
         company: {
@@ -346,11 +369,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           website: client?.companyWebsite || "",
         },
         payment: {
-          method: "Bank Transfer",
-          beneficiaryName: companyProfile?.companyName || "Hyperlinq Technology",
+          method: "Bank Transfer / UPI",
+          beneficiaryName: companyProfile?.bankAccountHolderName || companyProfile?.companyName || "Hyperlinq Technology",
           accountNumber: companyProfile?.bankAccountNumber || "",
           ifscCode: companyProfile?.bankIfscCode || "",
           bankName: companyProfile?.bankName || "",
+          upiId: companyProfile?.upiId || "",
+          paymentLink: companyProfile?.paymentLink || "",
         },
         items: (invoice.lineItems || []).map((item: any) => ({
           description: item.description,
@@ -363,13 +388,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tax: formatCurrency(invoice.taxAmount),
           taxRate: taxRate,
           grandTotal: formatCurrency(invoice.totalAmount),
+          amountPaid: formatCurrency(invoice.amountPaid || 0),
+          amountPaidValue: invoice.amountPaid || 0,
+          balanceDue: formatCurrency(invoice.balanceDue),
           amountInWords: toWords.convert(invoice.totalAmount),
+          balanceInWords: invoice.balanceDue > 0 ? toWords.convert(invoice.balanceDue) : null,
         },
         notes: invoice.notes || "",
         terms: companyProfile?.invoiceTerms || "",
         footer: {
-          showQr: true,
-          qrCodeUrl: null, // Can be set to a UPI QR code URL
+          showQr: !!companyProfile?.upiId,
+          qrCodeUrl: qrCodeDataUrl,
+          upiId: companyProfile?.upiId || "",
+          paymentLink: companyProfile?.paymentLink || "",
           signatoryName: companyProfile?.authorizedSignatoryName || "Authorized Signatory",
           signatoryTitle: companyProfile?.authorizedSignatoryTitle || "Director",
           signDate: formatDate(invoice.issueDate),

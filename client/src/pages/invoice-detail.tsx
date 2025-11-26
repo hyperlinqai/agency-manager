@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { PDFDownloadLink } from "@react-pdf/renderer";
@@ -21,6 +21,7 @@ import { InvoicePDF } from "@/components/invoice-pdf";
 import type { InvoiceWithRelations, Payment, CompanyProfile, Client } from "@shared/schema";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
+import { generateUPIQRCode } from "@/lib/qrcode";
 
 export default function InvoiceDetailPage() {
   const [, params] = useRoute("/invoices/:id");
@@ -70,6 +71,48 @@ export default function InvoiceDetailPage() {
         .join(", ")
     : undefined;
 
+  // Generate UPI QR code and convert logo to base64 for PDF
+  const [upiQrCode, setUpiQrCode] = useState<string | undefined>(undefined);
+  const [logoBase64, setLogoBase64] = useState<string | undefined>(undefined);
+  
+  // Convert logo URL to base64 for PDF rendering
+  useEffect(() => {
+    const convertLogoToBase64 = async () => {
+      if (companyProfile?.logoUrl) {
+        try {
+          const response = await fetch(companyProfile.logoUrl);
+          const blob = await response.blob();
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setLogoBase64(reader.result as string);
+          };
+          reader.readAsDataURL(blob);
+        } catch (error) {
+          console.error("Failed to convert logo to base64:", error);
+        }
+      }
+    };
+    convertLogoToBase64();
+  }, [companyProfile?.logoUrl]);
+  
+  useEffect(() => {
+    const generateQR = async () => {
+      if (companyProfile?.upiId && invoice) {
+        try {
+          const qrCode = await generateUPIQRCode(
+            companyProfile.upiId,
+            companyProfile.companyName || "Company",
+            invoice.balanceDue > 0 ? invoice.balanceDue : invoice.totalAmount,
+            invoice.invoiceNumber
+          );
+          setUpiQrCode(qrCode);
+        } catch (error) {
+          console.error("Failed to generate UPI QR code:", error);
+        }
+      }
+    };
+    generateQR();
+  }, [companyProfile?.upiId, companyProfile?.companyName, invoice?.balanceDue, invoice?.totalAmount, invoice?.invoiceNumber]);
 
   if (isLoading) {
     return (
@@ -126,6 +169,8 @@ export default function InvoiceDetailPage() {
                     clientAddress={clientAddress}
                     clientEmail={client?.email}
                     payments={payments}
+                    upiQrCode={upiQrCode}
+                    logoBase64={logoBase64}
                   />
                 }
                 fileName={`${invoice.invoiceNumber}.pdf`}

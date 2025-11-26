@@ -173,10 +173,12 @@
                 <span class="text-gray-500">Beneficiary:</span>
                 <span class="font-medium text-gray-900"><%= payment.beneficiaryName %></span>
               </div>
-              <div class="flex justify-between">
-                <span class="text-gray-500">Account No:</span>
-                <span class="font-medium text-gray-900 font-mono"><%= payment.accountNumber %></span>
-              </div>
+              <% if (payment.accountNumber) { %>
+                <div class="flex justify-between">
+                  <span class="text-gray-500">Account No:</span>
+                  <span class="font-medium text-gray-900 font-mono"><%= payment.accountNumber %></span>
+                </div>
+              <% } %>
               <% if (payment.ifscCode) { %>
                 <div class="flex justify-between">
                   <span class="text-gray-500">IFSC:</span>
@@ -187,6 +189,12 @@
                 <div class="flex justify-between">
                   <span class="text-gray-500">Bank:</span>
                   <span class="font-medium text-gray-900"><%= payment.bankName %></span>
+                </div>
+              <% } %>
+              <% if (payment.upiId) { %>
+                <div class="flex justify-between border-t border-gray-200 pt-2 mt-2">
+                  <span class="text-gray-500">UPI ID:</span>
+                  <span class="font-medium text-brand-600"><%= payment.upiId %></span>
                 </div>
               <% } %>
             </div>
@@ -234,9 +242,19 @@
                   <span class="text-sm text-gray-500">Tax (<%= totals.taxRate || '0' %>%)</span>
                   <span class="text-sm font-medium text-gray-900 font-mono"><%= totals.tax %></span>
                 </div>
+                <div class="flex justify-between px-4 py-3 bg-gray-100">
+                  <span class="text-sm font-medium text-gray-700">Grand Total</span>
+                  <span class="text-sm font-bold text-gray-900 font-mono"><%= totals.grandTotal %></span>
+                </div>
+                <% if (totals.amountPaid && totals.amountPaidValue > 0) { %>
+                  <div class="flex justify-between px-4 py-3">
+                    <span class="text-sm text-green-600">Amount Paid</span>
+                    <span class="text-sm font-medium text-green-600 font-mono">- <%= totals.amountPaid %></span>
+                  </div>
+                <% } %>
                 <div class="flex justify-between px-4 py-4 bg-brand-600 text-white">
-                  <span class="font-semibold">Grand Total</span>
-                  <span class="text-lg font-bold font-mono"><%= totals.grandTotal %></span>
+                  <span class="font-semibold">Balance Due</span>
+                  <span class="text-lg font-bold font-mono"><%= totals.balanceDue %></span>
                 </div>
               </div>
             </div>
@@ -244,12 +262,12 @@
         </div>
       </div>
 
-      <!-- Amount in Words -->
-      <% if (totals.amountInWords) { %>
+      <!-- Amount in Words (for balance due) -->
+      <% if (totals.balanceInWords) { %>
         <div class="px-8 pb-6">
           <div class="bg-brand-50 rounded-lg px-4 py-3 border border-brand-100">
             <p class="text-sm text-brand-700">
-              <span class="font-medium">Amount in words:</span> <%= totals.amountInWords %>
+              <span class="font-medium">Balance due in words:</span> <%= totals.balanceInWords %>
             </p>
           </div>
         </div>
@@ -275,43 +293,67 @@
       <!-- Terms Section -->
       <% if (terms) { %>
         <div class="px-8 pb-6">
-          <div class="bg-gray-50 rounded-xl p-5 border border-gray-100">
+          <div class="bg-gray-50 rounded-xl p-4 border border-gray-100">
             <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Terms & Conditions</h4>
-            <p class="text-sm text-gray-600 leading-relaxed"><%= terms %></p>
+            <div class="text-xs text-gray-600 leading-relaxed space-y-1">
+              <% 
+                // Parse terms into lines - split by numbered patterns or newlines
+                const termLines = terms.split(/(?=\d+[\.\)\:])|[\n\r]+/).filter(line => line.trim());
+                termLines.forEach(function(line) { 
+              %>
+                <p class="mb-1"><%= line.trim() %></p>
+              <% }); %>
+            </div>
           </div>
         </div>
       <% } %>
 
       <!-- Footer: QR Code & Signature -->
-      <div class="px-8 py-6 border-t border-gray-100 bg-gray-50">
-        <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-6">
-          <!-- QR Code Placeholder -->
-          <% if (footer.showQr) { %>
-            <div class="text-center sm:text-left">
-              <p class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Scan to Pay</p>
-              <div class="inline-block w-24 h-24 bg-white rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
+      <div class="px-8 py-8 border-t border-gray-100 bg-gray-50">
+        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-8">
+          <!-- QR Code Section -->
+          <% if (footer.showQr || footer.upiId) { %>
+            <div class="text-center sm:text-left flex-shrink-0">
+              <p class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Scan to Pay</p>
+              <div class="flex flex-col sm:flex-row items-center sm:items-start gap-4">
                 <% if (footer.qrCodeUrl) { %>
-                  <img src="<%= footer.qrCodeUrl %>" alt="QR Code" class="w-full h-full object-contain rounded-lg">
+                  <div class="w-28 h-28 bg-white rounded-lg border border-gray-200 p-1 shadow-sm">
+                    <img src="<%= footer.qrCodeUrl %>" alt="UPI QR Code" class="w-full h-full object-contain rounded">
+                  </div>
                 <% } else { %>
-                  <div class="text-center p-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-300 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                    </svg>
-                    <p class="text-xs text-gray-400 mt-1">QR Code</p>
+                  <div class="w-28 h-28 bg-white rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
+                    <div class="text-center p-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-gray-300 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                      </svg>
+                      <p class="text-xs text-gray-400 mt-1">UPI QR</p>
+                    </div>
                   </div>
                 <% } %>
+                <div class="text-center sm:text-left">
+                  <% if (footer.upiId) { %>
+                    <p class="text-sm text-brand-600 font-medium mb-1">UPI: <%= footer.upiId %></p>
+                  <% } %>
+                  <% if (footer.paymentLink) { %>
+                    <p class="text-xs text-gray-500 mb-2">Or pay online:</p>
+                    <a href="<%= footer.paymentLink %>" target="_blank" class="text-xs text-brand-600 hover:underline break-all">
+                      <%= footer.paymentLink.length > 40 ? footer.paymentLink.substring(0, 40) + '...' : footer.paymentLink %>
+                    </a>
+                  <% } %>
+                  <p class="text-xs text-gray-400 mt-2">Scan QR code with any UPI app</p>
+                </div>
               </div>
             </div>
           <% } else { %>
-            <div></div>
+            <div class="flex-1"></div>
           <% } %>
 
           <!-- Signature -->
-          <div class="text-center sm:text-right">
-            <div class="inline-block">
-              <div class="w-48 border-b-2 border-gray-400 mb-2 h-12"></div>
+          <div class="text-center sm:text-right flex-shrink-0">
+            <div class="inline-block min-w-[180px]">
+              <div class="w-48 border-b-2 border-gray-400 mb-3 h-14"></div>
               <p class="text-sm font-semibold text-gray-900"><%= footer.signatoryName %></p>
-              <p class="text-xs text-gray-500"><%= footer.signatoryTitle || 'Authorized Signatory' %></p>
+              <p class="text-xs text-gray-500 mt-1"><%= footer.signatoryTitle || 'Authorized Signatory' %></p>
               <p class="text-xs text-gray-400 mt-1"><%= footer.signDate %></p>
             </div>
           </div>
