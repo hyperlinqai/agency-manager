@@ -27,9 +27,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Pencil, Building2, Save, Briefcase, Download } from "lucide-react";
+import { Plus, Pencil, Building2, Save, Briefcase, Download, Trash2 } from "lucide-react";
 import { ServiceDialog } from "@/components/service-dialog";
 import { JobRoleDialog } from "@/components/job-role-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import type { Service, CompanyProfile, JobRole } from "@shared/schema";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -45,6 +46,8 @@ export default function SettingsPage() {
   const [isServiceDialogOpen, setIsServiceDialogOpen] = useState(false);
   const [selectedJobRole, setSelectedJobRole] = useState<JobRole | null>(null);
   const [isJobRoleDialogOpen, setIsJobRoleDialogOpen] = useState(false);
+  const [deletingService, setDeletingService] = useState<Service | null>(null);
+  const [deletingJobRole, setDeletingJobRole] = useState<JobRole | null>(null);
 
   const { data: services, isLoading } = useQuery<Service[]>({
     queryKey: ["/api/services"],
@@ -55,6 +58,34 @@ export default function SettingsPage() {
   });
 
   const { toast } = useToast();
+
+  const deleteServiceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/services/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/services"] });
+      toast({ title: "Success", description: "Service deleted successfully" });
+      setDeletingService(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteJobRoleMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/job-roles/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/job-roles"] });
+      toast({ title: "Success", description: "Job role deleted successfully" });
+      setDeletingJobRole(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
 
   const seedJobRolesMutation = useMutation({
     mutationFn: async () => {
@@ -196,14 +227,25 @@ export default function SettingsPage() {
                           {formatDate(service.updatedAt)}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEditService(service)}
-                            data-testid={`button-edit-${service.id}`}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditService(service)}
+                              data-testid={`button-edit-${service.id}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setDeletingService(service)}
+                              data-testid={`button-delete-${service.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -293,14 +335,25 @@ export default function SettingsPage() {
                           {formatDate(role.updatedAt)}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEditJobRole(role)}
-                            data-testid={`button-edit-${role.id}`}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditJobRole(role)}
+                              data-testid={`button-edit-${role.id}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setDeletingJobRole(role)}
+                              data-testid={`button-delete-role-${role.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -338,6 +391,24 @@ export default function SettingsPage() {
         role={selectedJobRole}
         open={isJobRoleDialogOpen}
         onClose={handleCloseJobRoleDialog}
+      />
+
+      <DeleteConfirmDialog
+        open={!!deletingService}
+        onOpenChange={(open) => !open && setDeletingService(null)}
+        onConfirm={() => deletingService && deleteServiceMutation.mutate(deletingService.id)}
+        title="Delete Service"
+        itemName={deletingService?.name}
+        isLoading={deleteServiceMutation.isPending}
+      />
+
+      <DeleteConfirmDialog
+        open={!!deletingJobRole}
+        onOpenChange={(open) => !open && setDeletingJobRole(null)}
+        onConfirm={() => deletingJobRole && deleteJobRoleMutation.mutate(deletingJobRole.id)}
+        title="Delete Job Role"
+        itemName={deletingJobRole?.title}
+        isLoading={deleteJobRoleMutation.isPending}
       />
     </div>
   );

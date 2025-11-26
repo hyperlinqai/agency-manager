@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,16 +20,35 @@ import {
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Trash2 } from "lucide-react";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import type { InvoiceWithRelations } from "@shared/schema";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function InvoicesPage() {
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [deletingInvoice, setDeletingInvoice] = useState<InvoiceWithRelations | null>(null);
 
   const { data: invoices, isLoading } = useQuery<InvoiceWithRelations[]>({
     queryKey: ["/api/invoices", { status: statusFilter === "all" ? undefined : statusFilter, search }],
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/invoices/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      toast({ title: "Success", description: "Invoice deleted successfully" });
+      setDeletingInvoice(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const filteredInvoices = invoices || [];
@@ -143,11 +162,22 @@ export default function InvoicesPage() {
                       <StatusBadge status={invoice.status} type="invoice" />
                     </TableCell>
                     <TableCell className="text-right">
-                      <Link href={`/invoices/${invoice.id}`}>
-                        <Button variant="ghost" size="sm" data-testid={`button-view-${invoice.id}`}>
-                          View
+                      <div className="flex justify-end gap-1">
+                        <Link href={`/invoices/${invoice.id}`}>
+                          <Button variant="ghost" size="sm" data-testid={`button-view-${invoice.id}`}>
+                            View
+                          </Button>
+                        </Link>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeletingInvoice(invoice)}
+                          data-testid={`button-delete-${invoice.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
-                      </Link>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -156,6 +186,15 @@ export default function InvoicesPage() {
           </div>
         )}
       </div>
+
+      <DeleteConfirmDialog
+        open={!!deletingInvoice}
+        onOpenChange={(open) => !open && setDeletingInvoice(null)}
+        onConfirm={() => deletingInvoice && deleteMutation.mutate(deletingInvoice.id)}
+        title="Delete Invoice"
+        itemName={deletingInvoice?.invoiceNumber}
+        isLoading={deleteMutation.isPending}
+      />
     </div>
   );
 }

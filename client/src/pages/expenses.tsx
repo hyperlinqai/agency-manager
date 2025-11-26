@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Calendar } from "lucide-react";
+import { Plus, Search, Calendar, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ExpenseDialog } from "@/components/expense-dialog";
 import { MarkExpensePaidDialog } from "@/components/mark-expense-paid-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { Expense, Vendor, ExpenseCategory } from "@shared/schema";
 import {
@@ -18,9 +20,11 @@ import {
 } from "@/components/ui/select";
 
 export default function ExpensesPage() {
+  const { toast } = useToast();
   const [showDialog, setShowDialog] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [markingPaidExpense, setMarkingPaidExpense] = useState<Expense | null>(null);
+  const [deletingExpense, setDeletingExpense] = useState<Expense | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [vendorFilter, setVendorFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -35,6 +39,20 @@ export default function ExpensesPage() {
 
   const { data: categories = [] } = useQuery<ExpenseCategory[]>({
     queryKey: ["/api/expense-categories"],
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/expenses/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      toast({ title: "Success", description: "Expense deleted successfully" });
+      setDeletingExpense(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const handleEdit = (expense: Expense) => {
@@ -265,6 +283,15 @@ export default function ExpensesPage() {
                             Mark Paid
                           </Button>
                         )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeletingExpense(expense)}
+                          data-testid={`button-delete-${expense.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -290,6 +317,15 @@ export default function ExpensesPage() {
           onClose={() => setMarkingPaidExpense(null)}
         />
       )}
+
+      <DeleteConfirmDialog
+        open={!!deletingExpense}
+        onOpenChange={(open) => !open && setDeletingExpense(null)}
+        onConfirm={() => deletingExpense && deleteMutation.mutate(deletingExpense.id)}
+        title="Delete Expense"
+        itemName={deletingExpense?.description}
+        isLoading={deleteMutation.isPending}
+      />
     </div>
   );
 }

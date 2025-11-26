@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter } from "lucide-react";
+import { Plus, Search, Filter, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { VendorDialog } from "@/components/vendor-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Vendor } from "@shared/schema";
 import {
   Select,
@@ -16,8 +18,10 @@ import {
 } from "@/components/ui/select";
 
 export default function VendorsPage() {
+  const { toast } = useToast();
   const [showDialog, setShowDialog] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [deletingVendor, setDeletingVendor] = useState<Vendor | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -32,6 +36,20 @@ export default function VendorsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vendors"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/vendors/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vendors"] });
+      toast({ title: "Success", description: "Vendor deleted successfully" });
+      setDeletingVendor(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -222,6 +240,15 @@ export default function VendorsPage() {
                         >
                           {vendor.status === "ACTIVE" ? "Deactivate" : "Activate"}
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeletingVendor(vendor)}
+                          data-testid={`button-delete-${vendor.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -239,6 +266,15 @@ export default function VendorsPage() {
           onClose={handleCloseDialog}
         />
       )}
+
+      <DeleteConfirmDialog
+        open={!!deletingVendor}
+        onOpenChange={(open) => !open && setDeletingVendor(null)}
+        onConfirm={() => deletingVendor && deleteMutation.mutate(deletingVendor.id)}
+        title="Delete Vendor"
+        itemName={deletingVendor?.name}
+        isLoading={deleteMutation.isPending}
+      />
     </div>
   );
 }

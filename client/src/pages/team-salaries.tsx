@@ -1,14 +1,17 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Plus, Users, DollarSign } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Plus, Users, DollarSign, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TeamMemberDialog } from "@/components/team-member-dialog";
 import { SalaryPaymentDialog } from "@/components/salary-payment-dialog";
 import { MarkSalaryPaidDialog } from "@/components/mark-salary-paid-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { TeamMember, SalaryPayment } from "@shared/schema";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import {
   Select,
   SelectContent,
@@ -18,11 +21,14 @@ import {
 } from "@/components/ui/select";
 
 export default function TeamSalariesPage() {
+  const { toast } = useToast();
   const [showTeamDialog, setShowTeamDialog] = useState(false);
   const [showSalaryDialog, setShowSalaryDialog] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [editingSalary, setEditingSalary] = useState<SalaryPayment | null>(null);
   const [markingPaidSalary, setMarkingPaidSalary] = useState<SalaryPayment | null>(null);
+  const [deletingMember, setDeletingMember] = useState<TeamMember | null>(null);
+  const [deletingSalary, setDeletingSalary] = useState<SalaryPayment | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [salaryStatusFilter, setSalaryStatusFilter] = useState("");
 
@@ -32,6 +38,34 @@ export default function TeamSalariesPage() {
 
   const { data: salaries = [], isLoading: loadingSalaries } = useQuery<SalaryPayment[]>({
     queryKey: ["/api/salaries", { status: salaryStatusFilter }],
+  });
+
+  const deleteMemberMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/team-members/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
+      toast({ title: "Success", description: "Team member deleted successfully" });
+      setDeletingMember(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteSalaryMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/salaries/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/salaries"] });
+      toast({ title: "Success", description: "Salary record deleted successfully" });
+      setDeletingSalary(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const handleEditMember = (member: TeamMember) => {
@@ -235,6 +269,15 @@ export default function TeamSalariesPage() {
                               >
                                 Edit
                               </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => setDeletingMember(member)}
+                                data-testid={`button-delete-${member.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -374,6 +417,15 @@ export default function TeamSalariesPage() {
                                   Mark Paid
                                 </Button>
                               )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => setDeletingSalary(salary)}
+                                data-testid={`button-delete-salary-${salary.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -410,6 +462,24 @@ export default function TeamSalariesPage() {
           onClose={() => setMarkingPaidSalary(null)}
         />
       )}
+
+      <DeleteConfirmDialog
+        open={!!deletingMember}
+        onOpenChange={(open) => !open && setDeletingMember(null)}
+        onConfirm={() => deletingMember && deleteMemberMutation.mutate(deletingMember.id)}
+        title="Delete Team Member"
+        itemName={deletingMember?.name}
+        isLoading={deleteMemberMutation.isPending}
+      />
+
+      <DeleteConfirmDialog
+        open={!!deletingSalary}
+        onOpenChange={(open) => !open && setDeletingSalary(null)}
+        onConfirm={() => deletingSalary && deleteSalaryMutation.mutate(deletingSalary.id)}
+        title="Delete Salary Record"
+        description={`Are you sure you want to delete the salary record for ${deletingSalary?.month}? This action cannot be undone.`}
+        isLoading={deleteSalaryMutation.isPending}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useRoute, Link } from "wouter";
+import { useRoute, Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,9 +21,10 @@ import {
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Edit, Plus } from "lucide-react";
+import { ArrowLeft, Edit, Plus, Trash2 } from "lucide-react";
 import { ClientDialog } from "@/components/client-dialog";
 import { ProjectDialog } from "@/components/project-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import type { Client, Project, InvoiceWithRelations } from "@shared/schema";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -31,9 +32,11 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 
 export default function ClientDetailPage() {
   const [, params] = useRoute("/clients/:id");
+  const [, navigate] = useLocation();
   const clientId = params?.id;
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const { toast } = useToast();
 
   const { data: client, isLoading: clientLoading } = useQuery<Client>({
@@ -75,6 +78,26 @@ export default function ClientDetailPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("DELETE", `/api/clients/${clientId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      toast({
+        title: "Client deleted",
+        description: "Client has been deleted successfully",
+      });
+      navigate("/clients");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   if (clientLoading) {
     return (
@@ -135,6 +158,15 @@ export default function ClientDetailPage() {
           >
             <Edit className="h-4 w-4 mr-2" />
             Edit
+          </Button>
+          <Button
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            onClick={() => setIsDeleteDialogOpen(true)}
+            data-testid="button-delete-client"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete
           </Button>
         </div>
       </div>
@@ -353,6 +385,14 @@ export default function ClientDetailPage() {
         open={isProjectDialogOpen}
         onOpenChange={setIsProjectDialogOpen}
         clientId={clientId!}
+      />
+      <DeleteConfirmDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={() => deleteMutation.mutate()}
+        title="Delete Client"
+        itemName={client.name}
+        isLoading={deleteMutation.isPending}
       />
     </div>
   );

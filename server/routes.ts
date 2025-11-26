@@ -144,6 +144,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/clients/:id", authenticateToken, async (req, res) => {
+    try {
+      await storage.deleteClient(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
   // ============================================
   // PROJECT ROUTES
   // ============================================
@@ -186,6 +195,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertProjectSchema.partial().parse(req.body);
       const project = await storage.updateProject(req.params.id, validatedData);
       res.json(project);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.delete("/api/projects/:id", authenticateToken, async (req, res) => {
+    try {
+      await storage.deleteProject(req.params.id);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(400).send(error.message);
     }
@@ -255,6 +273,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const invoice = await storage.updateInvoiceStatus(req.params.id, status);
       res.json(invoice);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.delete("/api/invoices/:id", authenticateToken, async (req, res) => {
+    try {
+      await storage.deleteInvoice(req.params.id);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(400).send(error.message);
     }
@@ -499,6 +526,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/services/:id", authenticateToken, async (req, res) => {
+    try {
+      await storage.deleteService(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
   // ============================================
   // DASHBOARD ROUTES
   // ============================================
@@ -586,6 +622,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/vendors/:id", authenticateToken, async (req, res) => {
+    try {
+      await storage.deleteVendor(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
   // ============================================
   // EXPENSE CATEGORY ROUTES
   // ============================================
@@ -625,6 +670,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertExpenseCategorySchema.partial().parse(req.body);
       const category = await storage.updateExpenseCategory(req.params.id, validatedData);
       res.json(category);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.delete("/api/expense-categories/:id", authenticateToken, async (req, res) => {
+    try {
+      await storage.deleteExpenseCategory(req.params.id);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(400).send(error.message);
     }
@@ -698,6 +752,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/expenses/:id", authenticateToken, async (req, res) => {
+    try {
+      await storage.deleteExpense(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
   // ============================================
   // TEAM MEMBER ROUTES
   // ============================================
@@ -758,6 +821,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/team-members/:id", authenticateToken, async (req, res) => {
+    try {
+      await storage.deleteTeamMember(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
   // ============================================
   // JOB ROLE ROUTES
   // ============================================
@@ -800,6 +872,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertJobRoleSchema.partial().parse(req.body);
       const role = await storage.updateJobRole(req.params.id, validatedData);
       res.json(role);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.delete("/api/job-roles/:id", authenticateToken, async (req, res) => {
+    try {
+      await storage.deleteJobRole(req.params.id);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(400).send(error.message);
     }
@@ -877,6 +958,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reference: reference || "",
       });
       res.json(salary);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.delete("/api/salaries/:id", authenticateToken, async (req, res) => {
+    try {
+      await storage.deleteSalaryPayment(req.params.id);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(400).send(error.message);
     }
