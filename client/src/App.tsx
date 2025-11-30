@@ -19,8 +19,17 @@ import InvoiceDetailPage from "@/pages/invoice-detail";
 import VendorsPage from "@/pages/vendors";
 import ExpensesPage from "@/pages/expenses";
 import TeamSalariesPage from "@/pages/team-salaries";
+import AttendancePage from "@/pages/attendance";
+import LeaveManagementPage from "@/pages/leave-management";
 import EmployeeOnboardingPage from "@/pages/employee-onboarding";
 import SettingsPage from "@/pages/settings";
+import ProposalsPage from "@/pages/proposals";
+import ProposalCreatePage from "@/pages/proposal-create";
+import ContractsPage from "@/pages/contracts";
+import ContractCreatePage from "@/pages/contract-create";
+import MonthlyReportsPage from "@/pages/monthly-reports";
+import PublicOnboardingPage from "@/pages/public-onboarding";
+import PublicTeamOnboardingPage from "@/pages/public-team-onboarding";
 
 function Router() {
   return (
@@ -95,6 +104,20 @@ function Router() {
           </ProtectedRoute>
         )}
       </Route>
+      <Route path="/attendance">
+        {() => (
+          <ProtectedRoute>
+            <AttendancePage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/leave-management">
+        {() => (
+          <ProtectedRoute>
+            <LeaveManagementPage />
+          </ProtectedRoute>
+        )}
+      </Route>
       <Route path="/employee-onboarding">
         {() => (
           <ProtectedRoute>
@@ -106,6 +129,69 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <SettingsPage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/proposals">
+        {() => (
+          <ProtectedRoute>
+            <ProposalsPage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/proposals/new">
+        {() => (
+          <ProtectedRoute>
+            <ProposalCreatePage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/proposals/:id">
+        {() => (
+          <ProtectedRoute>
+            <ProposalCreatePage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/contracts">
+        {() => (
+          <ProtectedRoute>
+            <ContractsPage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/contracts/new">
+        {() => (
+          <ProtectedRoute>
+            <ContractCreatePage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/contracts/:id">
+        {() => (
+          <ProtectedRoute>
+            <ContractCreatePage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/monthly-reports">
+        {() => (
+          <ProtectedRoute>
+            <MonthlyReportsPage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/monthly-reports/new">
+        {() => (
+          <ProtectedRoute>
+            <MonthlyReportsPage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/monthly-reports/:id">
+        {() => (
+          <ProtectedRoute>
+            <MonthlyReportsPage />
           </ProtectedRoute>
         )}
       </Route>
@@ -151,6 +237,12 @@ export default function App() {
           <Switch>
             <Route path="/login">
               <LoginPage />
+            </Route>
+            <Route path="/onboarding/:token">
+              {(params) => <PublicOnboardingPage token={params.token} />}
+            </Route>
+            <Route path="/team-onboarding/:token">
+              {(params) => <PublicTeamOnboardingPage token={params.token} />}
             </Route>
             <Route path="*">
               {(params) => (

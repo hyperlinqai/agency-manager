@@ -271,3 +271,4 @@ export function ExpenseCategoryDialog({ category, open, onClose }: ExpenseCatego
   );
 }
 
+

@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Users, DollarSign, Trash2, UserPlus } from "lucide-react";
-import { Link } from "wouter";
+import { Plus, Users, DollarSign, Trash2, UserPlus, Link2, Copy, ExternalLink } from "lucide-react";
+import { Link, useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,6 +23,32 @@ import {
 
 export default function TeamSalariesPage() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const searchString = useSearch();
+
+  // Parse tab from URL query params
+  const getTabFromUrl = () => {
+    const params = new URLSearchParams(searchString);
+    const tab = params.get("tab");
+    return tab === "salaries" ? "salaries" : "team";
+  };
+
+  const [activeTab, setActiveTab] = useState(getTabFromUrl);
+
+  // Sync tab state when URL changes
+  useEffect(() => {
+    setActiveTab(getTabFromUrl());
+  }, [searchString]);
+
+  // Update URL when tab changes
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    if (value === "salaries") {
+      setLocation("/team-salaries?tab=salaries");
+    } else {
+      setLocation("/team-salaries");
+    }
+  };
   const [showTeamDialog, setShowTeamDialog] = useState(false);
   const [showSalaryDialog, setShowSalaryDialog] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
@@ -145,7 +171,7 @@ export default function TeamSalariesPage() {
         </Link>
       </div>
 
-      <Tabs defaultValue="team" className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList>
           <TabsTrigger value="team" data-testid="tab-team">
             <Users className="h-4 w-4 mr-2" />
@@ -208,6 +234,9 @@ export default function TeamSalariesPage() {
                       <th className="text-left px-4 py-3 text-sm font-medium uppercase tracking-wide">
                         Status
                       </th>
+                      <th className="text-left px-4 py-3 text-sm font-medium uppercase tracking-wide">
+                        Onboarding
+                      </th>
                       <th className="text-right px-4 py-3 text-sm font-medium uppercase tracking-wide">
                         Actions
                       </th>
@@ -216,7 +245,7 @@ export default function TeamSalariesPage() {
                   <tbody>
                     {teamMembers.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                        <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
                           No team members found. Click "Add Team Member" to create one.
                         </td>
                       </tr>
@@ -265,6 +294,41 @@ export default function TeamSalariesPage() {
                             >
                               {member.status}
                             </Badge>
+                          </td>
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            {(member as any).onboardingToken ? (
+                              <div className="flex items-center gap-1">
+                                <Badge variant={(member as any).onboardingCompleted ? "default" : "secondary"}>
+                                  {(member as any).onboardingCompleted ? "Done" : "Pending"}
+                                </Badge>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0"
+                                  onClick={() => {
+                                    const url = `${window.location.origin}/team-onboarding/${(member as any).onboardingToken}`;
+                                    navigator.clipboard.writeText(url);
+                                    toast({ title: "Link copied!", description: url });
+                                  }}
+                                  title="Copy onboarding link"
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0"
+                                  onClick={() => {
+                                    window.open(`/team-onboarding/${(member as any).onboardingToken}`, "_blank");
+                                  }}
+                                  title="Open onboarding link"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">No link</span>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>

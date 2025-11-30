@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
-import { PDFDownloadLink } from "@react-pdf/renderer";
+import { pdf } from "@react-pdf/renderer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -15,18 +15,22 @@ import {
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Plus, Download, FileText, ExternalLink } from "lucide-react";
+import { ArrowLeft, Plus, Download, ExternalLink, Loader2 } from "lucide-react";
 import { PaymentDialog } from "@/components/payment-dialog";
 import { InvoicePDF } from "@/components/invoice-pdf";
 import type { InvoiceWithRelations, Payment, CompanyProfile, Client } from "@shared/schema";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { generateUPIQRCode } from "@/lib/qrcode";
+import { useToast } from "@/hooks/use-toast";
+import { convertImageForPdf } from "@/lib/pdf-utils";
 
 export default function InvoiceDetailPage() {
   const [, params] = useRoute("/invoices/:id");
   const invoiceId = params?.id;
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const { toast } = useToast();
 
   const { data: invoice, isLoading } = useQuery<InvoiceWithRelations>({
     queryKey: ["/api/invoices", invoiceId],
@@ -71,82 +75,72 @@ export default function InvoiceDetailPage() {
         .join(", ")
     : undefined;
 
-  // Generate UPI QR code and convert logo to base64 for PDF
+  // Generate UPI QR code for PDF
   const [upiQrCode, setUpiQrCode] = useState<string | undefined>(undefined);
-  const [logoBase64, setLogoBase64] = useState<string | undefined>(undefined);
-  
-  // Convert logo URL to base64 for PDF rendering
-  useEffect(() => {
-    const convertLogoToBase64 = async () => {
-      if (!companyProfile?.logoUrl) {
-        console.log("No logo URL in company profile");
-        return;
+
+  // Download PDF function - generates PDF on demand with fresh data
+  const handleDownloadPdf = async () => {
+    if (!invoice) return;
+
+    try {
+      setDownloadingPdf(true);
+
+      // Generate UPI QR code if needed
+      let qrCode: string | undefined;
+      if (companyProfile?.upiId) {
+        try {
+          qrCode = await generateUPIQRCode(
+            companyProfile.upiId,
+            companyProfile.companyName || "Company",
+            invoice.balanceDue > 0 ? invoice.balanceDue : invoice.totalAmount,
+            invoice.invoiceNumber
+          );
+        } catch (e) {
+          console.error("Failed to generate UPI QR code:", e);
+        }
       }
-      
-      const logoUrl = companyProfile.logoUrl;
-      console.log("Logo URL type:", logoUrl.substring(0, 50) + "...");
-      
-      // If already a data URL, use it directly
-      if (logoUrl.startsWith('data:')) {
-        console.log("Logo is already base64, setting directly");
-        setLogoBase64(logoUrl);
-        return;
-      }
-      
-      try {
-        // Use Image element to handle CORS and convert to base64
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        
-        img.onload = () => {
-          try {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth || img.width;
-            canvas.height = img.naturalHeight || img.height;
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.drawImage(img, 0, 0);
-              const dataUrl = canvas.toDataURL('image/png');
-              console.log("Logo converted to base64 via canvas");
-              setLogoBase64(dataUrl);
-            }
-          } catch (canvasError) {
-            console.error("Canvas conversion failed:", canvasError);
-            // Fallback: try fetch method
-            fetchLogoAsBase64(logoUrl);
-          }
-        };
-        
-        img.onerror = () => {
-          console.error("Image load failed, trying fetch method");
-          fetchLogoAsBase64(logoUrl);
-        };
-        
-        img.src = logoUrl;
-      } catch (error) {
-        console.error("Failed to convert logo to base64:", error);
-      }
-    };
-    
-    const fetchLogoAsBase64 = async (url: string) => {
-      try {
-        const response = await fetch(url, { mode: 'cors' });
-        if (!response.ok) throw new Error('Fetch failed');
-        const blob = await response.blob();
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          console.log("Logo converted to base64 via fetch");
-          setLogoBase64(reader.result as string);
-        };
-        reader.readAsDataURL(blob);
-      } catch (err) {
-        console.error("Fetch logo failed:", err);
-      }
-    };
-    
-    convertLogoToBase64();
-  }, [companyProfile?.logoUrl]);
-  
+
+      // Convert logo to PDF-compatible format (handles SVG, remote URLs, etc.)
+      const logoBase64 = await convertImageForPdf(companyProfile?.logoUrl);
+
+      const blob = await pdf(
+        <InvoicePDF
+          invoice={invoice}
+          companyProfile={companyProfile}
+          clientAddress={clientAddress}
+          clientEmail={client?.email}
+          payments={payments}
+          upiQrCode={qrCode || upiQrCode}
+          logoBase64={logoBase64}
+        />
+      ).toBlob();
+
+      // Download the PDF
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${invoice.invoiceNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "PDF Downloaded",
+        description: `Invoice ${invoice.invoiceNumber} has been downloaded.`,
+      });
+    } catch (error: any) {
+      console.error("PDF generation error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to generate PDF",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   useEffect(() => {
     const generateQR = async () => {
       if (companyProfile?.upiId && invoice) {
@@ -213,37 +207,24 @@ export default function InvoiceDetailPage() {
               </Button>
               
               {/* Download PDF */}
-              <PDFDownloadLink
-                key={`pdf-${invoice.id}-${logoBase64?.slice(-20) || 'no-logo'}`}
-                document={
-                  <InvoicePDF
-                    invoice={invoice}
-                    companyProfile={companyProfile}
-                    clientAddress={clientAddress}
-                    clientEmail={client?.email}
-                    payments={payments}
-                    upiQrCode={upiQrCode}
-                    logoBase64={logoBase64}
-                  />
-                }
-                fileName={`${invoice.invoiceNumber}.pdf`}
+              <Button
+                variant="outline"
+                onClick={handleDownloadPdf}
+                disabled={downloadingPdf}
+                data-testid="button-download-pdf"
               >
-                {({ loading }) => (
-                  <Button variant="outline" disabled={loading} data-testid="button-download-pdf">
-                    {loading ? (
-                      <>
-                        <FileText className="h-4 w-4 mr-2" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Download className="h-4 w-4 mr-2" />
-                        Download PDF
-                      </>
-                    )}
-                  </Button>
+                {downloadingPdf ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download PDF
+                  </>
                 )}
-              </PDFDownloadLink>
+              </Button>
             </>
           )}
           <StatusBadge status={invoice.status} type="invoice" />

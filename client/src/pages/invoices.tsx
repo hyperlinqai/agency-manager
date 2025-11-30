@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { pdf } from "@react-pdf/renderer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -18,24 +21,231 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { InvoicePDF } from "@/components/invoice-pdf";
+import { Plus, Search, Trash2, MoreHorizontal, Mail, Eye, Download, Loader2 } from "lucide-react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import type { InvoiceWithRelations } from "@shared/schema";
+import type { InvoiceWithRelations, CompanyProfile, Client, Payment } from "@shared/schema";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { generateUPIQRCode } from "@/lib/qrcode";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { convertImageForPdf } from "@/lib/pdf-utils";
 
 export default function InvoicesPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [deletingInvoice, setDeletingInvoice] = useState<InvoiceWithRelations | null>(null);
+  const [sendEmailDialog, setSendEmailDialog] = useState<InvoiceWithRelations | null>(null);
+  const [emailMessage, setEmailMessage] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
+  const [logoBase64, setLogoBase64] = useState<string | undefined>(undefined);
 
   const { data: invoices, isLoading } = useQuery<InvoiceWithRelations[]>({
     queryKey: ["/api/invoices", { status: statusFilter === "all" ? undefined : statusFilter, search }],
   });
+
+  const { data: companyProfile } = useQuery<CompanyProfile>({
+    queryKey: ["/api/settings/company"],
+    queryFn: async () => {
+      return apiRequest("GET", "/api/settings/company");
+    },
+  });
+
+  const { data: clients } = useQuery<Client[]>({
+    queryKey: ["/api/clients"],
+  });
+
+  // Helper to get client details
+  const getClientForInvoice = (invoice: InvoiceWithRelations | null) => {
+    if (!invoice) return null;
+    return clients?.find(c => c.id === invoice.clientId);
+  };
+
+  // Download PDF function
+  const handleDownloadPdf = async (invoice: InvoiceWithRelations) => {
+    try {
+      setDownloadingPdf(invoice.id);
+      const client = getClientForInvoice(invoice);
+
+      // Fetch payments for this invoice
+      let payments: Payment[] = [];
+      try {
+        payments = await apiRequest("GET", `/api/invoices/${invoice.id}/payments`);
+      } catch (e) {
+        console.error("Failed to fetch payments:", e);
+      }
+
+      // Generate UPI QR code if UPI ID is configured
+      let upiQrCode: string | undefined;
+      if (companyProfile?.upiId) {
+        try {
+          upiQrCode = await generateUPIQRCode(
+            companyProfile.upiId,
+            companyProfile.companyName || "Company",
+            invoice.balanceDue > 0 ? invoice.balanceDue : invoice.totalAmount,
+            invoice.invoiceNumber
+          );
+        } catch (e) {
+          console.error("Failed to generate UPI QR code:", e);
+        }
+      }
+
+      // Convert logo to PDF-compatible format (handles SVG, remote URLs, etc.)
+      let logoForPdf = logoBase64;
+      if (!logoForPdf && companyProfile?.logoUrl) {
+        logoForPdf = await convertImageForPdf(companyProfile.logoUrl);
+        if (logoForPdf) {
+          setLogoBase64(logoForPdf); // Cache it for future use
+        }
+      }
+
+      const clientAddress = client
+        ? [client.address, client.companyWebsite].filter(Boolean).join(", ")
+        : undefined;
+
+      const blob = await pdf(
+        <InvoicePDF
+          invoice={invoice}
+          companyProfile={companyProfile}
+          clientAddress={clientAddress}
+          clientEmail={client?.email}
+          payments={payments}
+          upiQrCode={upiQrCode}
+          logoBase64={logoForPdf}
+        />
+      ).toBlob();
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${invoice.invoiceNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "PDF Downloaded",
+        description: `Invoice ${invoice.invoiceNumber} has been downloaded.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to generate PDF",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingPdf(null);
+    }
+  };
+
+  // Send email function
+  const handleSendEmail = async () => {
+    if (!sendEmailDialog) return;
+
+    setSendingEmail(true);
+    try {
+      const client = getClientForInvoice(sendEmailDialog);
+
+      // Fetch payments for this invoice
+      let payments: Payment[] = [];
+      try {
+        payments = await apiRequest("GET", `/api/invoices/${sendEmailDialog.id}/payments`);
+      } catch (e) {
+        console.error("Failed to fetch payments:", e);
+      }
+
+      // Generate UPI QR code if UPI ID is configured
+      let upiQrCode: string | undefined;
+      if (companyProfile?.upiId) {
+        try {
+          upiQrCode = await generateUPIQRCode(
+            companyProfile.upiId,
+            companyProfile.companyName || "Company",
+            sendEmailDialog.balanceDue > 0 ? sendEmailDialog.balanceDue : sendEmailDialog.totalAmount,
+            sendEmailDialog.invoiceNumber
+          );
+        } catch (e) {
+          console.error("Failed to generate UPI QR code:", e);
+        }
+      }
+
+      const clientAddress = client
+        ? [client.address, client.companyWebsite].filter(Boolean).join(", ")
+        : undefined;
+
+      // Convert logo to PDF-compatible format (handles SVG, remote URLs, etc.)
+      let logoForPdf = logoBase64;
+      if (!logoForPdf && companyProfile?.logoUrl) {
+        logoForPdf = await convertImageForPdf(companyProfile.logoUrl);
+        if (logoForPdf) {
+          setLogoBase64(logoForPdf); // Cache it for future use
+        }
+      }
+
+      // Generate PDF as base64
+      const blob = await pdf(
+        <InvoicePDF
+          invoice={sendEmailDialog}
+          companyProfile={companyProfile}
+          clientAddress={clientAddress}
+          clientEmail={client?.email}
+          payments={payments}
+          upiQrCode={upiQrCode}
+          logoBase64={logoForPdf}
+        />
+      ).toBlob();
+
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          resolve(result.split(",")[1]);
+        };
+        reader.readAsDataURL(blob);
+      });
+
+      await apiRequest("POST", `/api/invoices/${sendEmailDialog.id}/send-email`, {
+        customMessage: emailMessage,
+        pdfBase64: base64,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      toast({
+        title: "Email Sent",
+        description: `Invoice has been sent to ${client?.email || "the client"}.`,
+      });
+      setSendEmailDialog(null);
+      setEmailMessage("");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send email",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingEmail(false);
+    }
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -162,22 +372,44 @@ export default function InvoicesPage() {
                       <StatusBadge status={invoice.status} type="invoice" />
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Link href={`/invoices/${invoice.id}`}>
-                          <Button variant="ghost" size="sm" data-testid={`button-view-${invoice.id}`}>
-                            View
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
                           </Button>
-                        </Link>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setDeletingInvoice(invoice)}
-                          data-testid={`button-delete-${invoice.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <Link href={`/invoices/${invoice.id}`}>
+                            <DropdownMenuItem>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                          </Link>
+                          <DropdownMenuItem
+                            onClick={() => handleDownloadPdf(invoice)}
+                            disabled={downloadingPdf === invoice.id}
+                          >
+                            {downloadingPdf === invoice.id ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <Download className="h-4 w-4 mr-2" />
+                            )}
+                            Download PDF
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setSendEmailDialog(invoice)}>
+                            <Mail className="h-4 w-4 mr-2" />
+                            Send Email
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => setDeletingInvoice(invoice)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -195,6 +427,74 @@ export default function InvoicesPage() {
         itemName={deletingInvoice?.invoiceNumber}
         isLoading={deleteMutation.isPending}
       />
+
+      {/* Send Email Dialog */}
+      <Dialog open={!!sendEmailDialog} onOpenChange={(open) => !open && setSendEmailDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Send Invoice via Email
+            </DialogTitle>
+            <DialogDescription>
+              Send invoice {sendEmailDialog?.invoiceNumber} to{" "}
+              <span className="font-medium">{getClientForInvoice(sendEmailDialog)?.email || "client"}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="email-message">Custom Message (Optional)</Label>
+              <Textarea
+                id="email-message"
+                placeholder="Add a personal message to include in the email..."
+                value={emailMessage}
+                onChange={(e) => setEmailMessage(e.target.value)}
+                rows={4}
+              />
+              <p className="text-xs text-muted-foreground">
+                This message will appear in the email body before the invoice details.
+              </p>
+            </div>
+            <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+              <p className="text-sm font-medium">Invoice Details</p>
+              <p className="text-sm text-muted-foreground">
+                Invoice #: {sendEmailDialog?.invoiceNumber}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Amount: {sendEmailDialog ? formatCurrency(sendEmailDialog.totalAmount) : ""}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Due: {sendEmailDialog ? formatDate(sendEmailDialog.dueDate) : ""}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSendEmailDialog(null);
+                setEmailMessage("");
+              }}
+              disabled={sendingEmail}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSendEmail} disabled={sendingEmail}>
+              {sendingEmail ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Mail className="h-4 w-4 mr-2" />
+                  Send Email
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

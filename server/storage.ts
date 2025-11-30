@@ -15,6 +15,17 @@ import {
   type SalaryPayment,
   type CompanyProfile,
   type JobRole,
+  type Proposal,
+  type Contract,
+  type ClientOnboardingData,
+  type MonthlyReport,
+  type ClientDigitalAsset,
+  type ApiSettings,
+  type Attendance,
+  type LeaveType,
+  type LeavePolicy,
+  type LeaveRequest,
+  type LeaveBalance,
   type InsertClient,
   type InsertProject,
   type InsertPayment,
@@ -26,12 +37,35 @@ import {
   type InsertSalaryPayment,
   type InsertCompanyProfile,
   type InsertJobRole,
+  type InsertProposal,
+  type InsertContract,
+  type InsertClientOnboardingData,
+  type InsertMonthlyReport,
+  type InsertClientDigitalAsset,
+  type InsertApiSettings,
+  type InsertAttendance,
+  type InsertLeaveType,
+  type InsertLeavePolicy,
+  type InsertLeaveRequest,
+  type InsertLeaveBalance,
   type ClientWithStats,
   type InvoiceWithRelations,
   type VendorWithStats,
   type ExpenseWithRelations,
+  type ProposalWithRelations,
+  type ContractWithRelations,
+  type MonthlyReportWithRelations,
+  type AttendanceWithMember,
+  type LeavePolicyWithDetails,
+  type LeaveRequestWithDetails,
+  type LeaveBalanceWithDetails,
   type DashboardSummary,
   type FinancialSummary,
+  type SlackSettings,
+  type SlackAttendanceLog,
+  type InsertSlackSettings,
+  type InsertSlackAttendanceLog,
+  type SlackAttendanceLogWithDetails,
 } from "@shared/schema";
 import { nanoid } from "nanoid";
 
@@ -153,6 +187,8 @@ export interface IStorage {
   createTeamMember(member: InsertTeamMember): Promise<TeamMember>;
   updateTeamMember(id: string, member: Partial<InsertTeamMember>): Promise<TeamMember>;
   updateTeamMemberStatus(id: string, status: string): Promise<TeamMember>;
+  getTeamMemberByOnboardingToken(token: string): Promise<TeamMember | undefined>;
+  regenerateTeamMemberOnboardingToken(teamMemberId: string): Promise<TeamMember>;
   
   // Salary Payment methods
   getSalaryPayments(filters?: { teamMemberId?: string; month?: string; status?: string }): Promise<SalaryPayment[]>;
@@ -168,6 +204,123 @@ export interface IStorage {
   getCompanyProfile(): Promise<CompanyProfile | undefined>;
   createCompanyProfile(profile: InsertCompanyProfile): Promise<CompanyProfile>;
   updateCompanyProfile(id: string, profile: Partial<InsertCompanyProfile>): Promise<CompanyProfile>;
+  
+  // ============================================
+  // MARKETING MODULE METHODS
+  // ============================================
+  
+  // Proposal methods
+  getProposals(filters?: { clientId?: string; status?: string }): Promise<ProposalWithRelations[]>;
+  getProposalById(id: string): Promise<ProposalWithRelations | undefined>;
+  createProposal(proposal: InsertProposal): Promise<Proposal>;
+  updateProposal(id: string, proposal: Partial<InsertProposal>): Promise<Proposal>;
+  updateProposalStatus(id: string, status: string): Promise<Proposal>;
+  deleteProposal(id: string): Promise<void>;
+  
+  // Contract methods
+  getContracts(filters?: { clientId?: string; status?: string }): Promise<ContractWithRelations[]>;
+  getContractById(id: string): Promise<ContractWithRelations | undefined>;
+  createContract(contract: InsertContract): Promise<Contract>;
+  updateContract(id: string, contract: Partial<InsertContract>): Promise<Contract>;
+  updateContractStatus(id: string, status: string): Promise<Contract>;
+  deleteContract(id: string): Promise<void>;
+  
+  // Client Onboarding Data methods
+  getClientOnboardingData(clientId: string): Promise<ClientOnboardingData | undefined>;
+  createClientOnboardingData(data: InsertClientOnboardingData): Promise<ClientOnboardingData>;
+  updateClientOnboardingData(id: string, data: Partial<InsertClientOnboardingData>): Promise<ClientOnboardingData>;
+  getClientByOnboardingToken(token: string): Promise<Client | undefined>;
+  regenerateOnboardingToken(clientId: string): Promise<Client>;
+  
+  // Monthly Report methods
+  getMonthlyReports(filters?: { clientId?: string; projectId?: string; status?: string }): Promise<MonthlyReportWithRelations[]>;
+  getMonthlyReportById(id: string): Promise<MonthlyReportWithRelations | undefined>;
+  createMonthlyReport(report: InsertMonthlyReport): Promise<MonthlyReport>;
+  updateMonthlyReport(id: string, report: Partial<InsertMonthlyReport>): Promise<MonthlyReport>;
+  updateMonthlyReportStatus(id: string, status: string): Promise<MonthlyReport>;
+  deleteMonthlyReport(id: string): Promise<void>;
+  
+  // Client Digital Asset methods
+  getClientDigitalAssets(filters?: { clientId?: string; category?: string }): Promise<ClientDigitalAsset[]>;
+  getClientDigitalAssetById(id: string): Promise<ClientDigitalAsset | undefined>;
+  createClientDigitalAsset(asset: InsertClientDigitalAsset): Promise<ClientDigitalAsset>;
+  updateClientDigitalAsset(id: string, asset: Partial<InsertClientDigitalAsset>): Promise<ClientDigitalAsset>;
+  deleteClientDigitalAsset(id: string): Promise<void>;
+
+  // API Settings methods
+  getApiSettings(): Promise<ApiSettings | undefined>;
+  upsertApiSettings(settings: Partial<InsertApiSettings>): Promise<ApiSettings>;
+
+  // ============================================
+  // HR & PAYROLL MODULE METHODS
+  // ============================================
+
+  // Attendance methods
+  getAttendance(filters?: { teamMemberId?: string; fromDate?: string; toDate?: string; status?: string }): Promise<AttendanceWithMember[]>;
+  getAttendanceById(id: string): Promise<Attendance | undefined>;
+  createAttendance(attendance: InsertAttendance): Promise<Attendance>;
+  createBulkAttendance(records: InsertAttendance[]): Promise<Attendance[]>;
+  updateAttendance(id: string, attendance: Partial<InsertAttendance>): Promise<Attendance>;
+  deleteAttendance(id: string): Promise<void>;
+
+  // Leave Type methods
+  getLeaveTypes(filters?: { isActive?: boolean }): Promise<LeaveType[]>;
+  getLeaveTypeById(id: string): Promise<LeaveType | undefined>;
+  createLeaveType(leaveType: InsertLeaveType): Promise<LeaveType>;
+  updateLeaveType(id: string, leaveType: Partial<InsertLeaveType>): Promise<LeaveType>;
+  seedDefaultLeaveTypes(): Promise<void>;
+
+  // Leave Policy methods
+  getLeavePolicies(filters?: { jobRoleId?: string; leaveTypeId?: string }): Promise<LeavePolicyWithDetails[]>;
+  getLeavePolicyById(id: string): Promise<LeavePolicy | undefined>;
+  createLeavePolicy(policy: InsertLeavePolicy): Promise<LeavePolicy>;
+  updateLeavePolicy(id: string, policy: Partial<InsertLeavePolicy>): Promise<LeavePolicy>;
+  deleteLeavePolicy(id: string): Promise<void>;
+  seedDefaultLeavePolicies(): Promise<{ created: number; skipped: number }>;
+
+  // Leave Request methods
+  getLeaveRequests(filters?: { teamMemberId?: string; status?: string; fromDate?: string; toDate?: string }): Promise<LeaveRequestWithDetails[]>;
+  getLeaveRequestById(id: string): Promise<LeaveRequestWithDetails | undefined>;
+  createLeaveRequest(request: InsertLeaveRequest): Promise<LeaveRequest>;
+  updateLeaveRequest(id: string, request: Partial<InsertLeaveRequest>): Promise<LeaveRequest>;
+  approveLeaveRequest(id: string, approvedBy: string): Promise<LeaveRequest>;
+  rejectLeaveRequest(id: string, rejectionReason: string): Promise<LeaveRequest>;
+  cancelLeaveRequest(id: string): Promise<LeaveRequest>;
+  deleteLeaveRequest(id: string): Promise<void>;
+
+  // Leave Balance methods
+  getLeaveBalances(filters?: { teamMemberId?: string; year?: number }): Promise<LeaveBalanceWithDetails[]>;
+  getLeaveBalanceById(id: string): Promise<LeaveBalance | undefined>;
+  createLeaveBalance(balance: InsertLeaveBalance): Promise<LeaveBalance>;
+  updateLeaveBalance(id: string, balance: Partial<InsertLeaveBalance>): Promise<LeaveBalance>;
+  initializeLeaveBalancesForMember(teamMemberId: string, joinedDate: Date): Promise<LeaveBalance[]>;
+  reinitializeLeaveBalancesForMember(teamMemberId: string): Promise<LeaveBalance[]>;
+  recalculateLeaveBalance(teamMemberId: string, leaveTypeId: string, year: number): Promise<LeaveBalance>;
+  checkLeaveAvailability(teamMemberId: string, leaveTypeId: string, requestedDays: number, year?: number): Promise<{
+    available: boolean;
+    balance: number;
+    pending: number;
+    used: number;
+    totalQuota: number;
+    requestedDays: number;
+    shortfall: number;
+    leaveTypeName?: string;
+    message: string;
+  }>;
+
+  // Slack Integration methods
+  getSlackSettings(): Promise<SlackSettings | undefined>;
+  saveSlackSettings(settings: InsertSlackSettings): Promise<SlackSettings>;
+  updateSlackSettings(id: string, settings: Partial<InsertSlackSettings>): Promise<SlackSettings>;
+  deleteSlackSettings(): Promise<void>;
+
+  // Slack Attendance Log methods
+  getSlackAttendanceLogs(filters?: { teamMemberId?: string; fromDate?: string; toDate?: string; eventType?: string }): Promise<SlackAttendanceLogWithDetails[]>;
+  getSlackAttendanceLogByMessageTs(slackMessageTs: string): Promise<SlackAttendanceLog | undefined>;
+  createSlackAttendanceLog(log: InsertSlackAttendanceLog): Promise<SlackAttendanceLog>;
+
+  // Team member by Slack user ID
+  getTeamMemberBySlackUserId(slackUserId: string): Promise<TeamMember | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -249,7 +402,45 @@ export class DatabaseStorage implements IStorage {
 
   async getClientById(id: string): Promise<Client | undefined> {
     const db = await getDb();
-    const client = await db.collection("clients").findOne({ id });
+    
+    // First, fetch the client
+    let client = await db.collection("clients").findOne({ id });
+    if (!client) return undefined;
+    
+    // If client doesn't have an onboarding token, generate one using atomic operation
+    // This prevents race conditions when multiple requests happen in parallel
+    if (!client.onboardingToken) {
+      const token = nanoid(32);
+      // Use $setOnInsert-like behavior by only updating if token is still missing
+      const result = await db.collection("clients").findOneAndUpdate(
+        { 
+          id, 
+          $or: [
+            { onboardingToken: { $exists: false } },
+            { onboardingToken: null },
+            { onboardingToken: "" }
+          ]
+        },
+        { 
+          $set: { 
+            onboardingToken: token, 
+            onboardingCompleted: client.onboardingCompleted ?? false, 
+            updatedAt: new Date() 
+          } 
+        },
+        { returnDocument: "after" }
+      );
+      
+      if (result) {
+        console.log(`Generated new onboarding token for client ${id}: ${token}`);
+        client = result;
+      } else {
+        // Another request already set the token, fetch the updated client
+        client = await db.collection("clients").findOne({ id });
+        console.log(`Token already set for client ${id}: ${client?.onboardingToken}`);
+      }
+    }
+    
     return client ? toSchema<Client>(client) : undefined;
   }
 
@@ -257,12 +448,57 @@ export class DatabaseStorage implements IStorage {
     const db = await getDb();
     const newClient = {
       id: nanoid(),
-      ...client,
+      name: client.name,
+      contactName: client.contactName,
+      email: client.email,
+      phone: client.phone,
+      companyWebsite: client.companyWebsite || "",
+      address: client.address || "",
+      industry: client.industry || "",
+      projectType: client.projectType || "MIXED",
+      status: client.status || "ONBOARDING",
+      notes: client.notes || "",
+      portalUrl: client.portalUrl || "",
+      onboardingToken: nanoid(32), // Generate unique token for public onboarding
+      onboardingCompleted: false,
+      onboardingCompletedAt: null,
+      contractStartDate: client.contractStartDate || null,
+      contractEndDate: client.contractEndDate || null,
+      nextReviewDate: client.nextReviewDate || null,
+      retentionNotes: client.retentionNotes || "",
       createdAt: new Date(),
       updatedAt: new Date(),
     };
     await db.collection("clients").insertOne(toMongo(newClient));
     return toSchema<Client>(newClient);
+  }
+
+  async getClientByOnboardingToken(token: string): Promise<Client | undefined> {
+    const db = await getDb();
+    console.log(`Searching for client with onboardingToken: ${token}`);
+    const client = await db.collection("clients").findOne({ onboardingToken: token });
+    if (client) {
+      console.log(`Found client: ${client.name} (${client.id})`);
+    } else {
+      // Debug: list all clients and their tokens
+      const allClients = await db.collection("clients").find({}).toArray();
+      console.log(`No client found. All clients and their tokens:`);
+      allClients.forEach(c => {
+        console.log(`  - ${c.name} (${c.id}): token=${c.onboardingToken || 'NONE'}`);
+      });
+    }
+    return client ? toSchema<Client>(client) : undefined;
+  }
+
+  async regenerateOnboardingToken(clientId: string): Promise<Client> {
+    const db = await getDb();
+    const result = await db.collection("clients").findOneAndUpdate(
+      { id: clientId },
+      { $set: { onboardingToken: nanoid(32), updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+    if (!result) throw new Error("Client not found");
+    return toSchema<Client>(result);
   }
 
   async updateClient(id: string, client: Partial<InsertClient>): Promise<Client> {
@@ -1119,7 +1355,24 @@ export class DatabaseStorage implements IStorage {
     }
     
     const members = await db.collection("teamMembers").find(query).toArray();
-    return members.map(toSchema<TeamMember>);
+    
+    // Ensure all team members have onboarding tokens
+    const membersWithTokens = await Promise.all(
+      members.map(async (m) => {
+        if (!m.onboardingToken || m.onboardingToken.trim() === "") {
+          console.log(`Team member ${m.name} (${m.id}) missing token, generating one...`);
+          const token = nanoid(32);
+          await db.collection("teamMembers").updateOne(
+            { id: m.id },
+            { $set: { onboardingToken: token, updatedAt: new Date() } }
+          );
+          m.onboardingToken = token;
+        }
+        return toSchema<TeamMember>(m);
+      })
+    );
+    
+    return membersWithTokens;
   }
 
   // Job Role methods
@@ -1353,20 +1606,53 @@ export class DatabaseStorage implements IStorage {
   async getTeamMemberById(id: string): Promise<TeamMember | undefined> {
     const db = await getDb();
     const member = await db.collection("teamMembers").findOne({ id });
-    return member ? toSchema<TeamMember>(member) : undefined;
+    if (!member) return undefined;
+    
+    // Ensure team member has an onboarding token
+    if (!member.onboardingToken || member.onboardingToken.trim() === "") {
+      console.log(`Team member ${member.name} (${member.id}) missing token, generating one...`);
+      const token = nanoid(32);
+      await db.collection("teamMembers").updateOne(
+        { id },
+        { $set: { onboardingToken: token, updatedAt: new Date() } }
+      );
+      member.onboardingToken = token;
+    }
+    
+    return toSchema<TeamMember>(member);
   }
 
   async createTeamMember(member: InsertTeamMember): Promise<TeamMember> {
     const db = await getDb();
+    // Always generate a token if not provided or if it's empty
+    const token = member.onboardingToken && member.onboardingToken.trim() !== "" 
+      ? member.onboardingToken 
+      : nanoid(32);
+    
     const newMember = {
       id: nanoid(),
       ...member,
+      onboardingToken: token,
+      onboardingCompleted: member.onboardingCompleted || false,
+      onboardingCompletedAt: member.onboardingCompletedAt || null,
       joinedDate: new Date(member.joinedDate),
       exitDate: member.exitDate ? new Date(member.exitDate) : null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    await db.collection("teamMembers").insertOne(toMongo(newMember));
+    console.log(`Creating team member ${newMember.name} with token: ${token.substring(0, 20)}... (length: ${token.length})`);
+    const mongoDoc = toMongo(newMember);
+    console.log(`MongoDB document onboardingToken: ${mongoDoc.onboardingToken?.substring(0, 20)}... (length: ${mongoDoc.onboardingToken?.length || 0})`);
+    await db.collection("teamMembers").insertOne(mongoDoc);
+    
+    // Verify the token was saved
+    const verify = await db.collection("teamMembers").findOne({ id: newMember.id });
+    if (verify?.onboardingToken !== token) {
+      console.error(`❌ Token mismatch after insert! Expected: ${token.substring(0, 20)}..., Got: ${verify?.onboardingToken?.substring(0, 20)}...`);
+    } else {
+      console.log(`✅ Token verified after insert`);
+    }
+    
     return toSchema<TeamMember>(newMember);
   }
 
@@ -1396,6 +1682,93 @@ export class DatabaseStorage implements IStorage {
     );
     
     if (!result) throw new Error("Team member not found");
+    return toSchema<TeamMember>(result);
+  }
+
+  async getTeamMemberByOnboardingToken(token: string): Promise<TeamMember | undefined> {
+    const db = await getDb();
+    
+    if (!token || token.trim() === "") {
+      console.log("❌ Empty or invalid token provided");
+      return undefined;
+    }
+    
+    // Try exact match first - simple query
+    let member = await db.collection("teamMembers").findOne({ onboardingToken: token });
+    
+    // Also try with trimmed token in case of whitespace issues
+    if (!member && token !== token.trim()) {
+      member = await db.collection("teamMembers").findOne({ onboardingToken: token.trim() });
+    }
+    
+    if (member) {
+      console.log(`✅ Found team member: ${member.name} (${member.id})`);
+      return toSchema<TeamMember>(member);
+    }
+    
+    // Try case-insensitive match (in case of encoding issues)
+    member = await db.collection("teamMembers").findOne({ 
+      onboardingToken: { $regex: new RegExp(`^${token}$`, "i") }
+    });
+    
+    if (member) {
+      console.log(`✅ Found team member (case-insensitive): ${member.name} (${member.id})`);
+      return toSchema<TeamMember>(member);
+    }
+    
+    // Also check for null/empty tokens that might need migration
+    const membersWithoutToken = await db.collection("teamMembers").find({
+      $or: [
+        { onboardingToken: { $exists: false } },
+        { onboardingToken: null },
+        { onboardingToken: "" }
+      ]
+    }).toArray();
+    
+    if (membersWithoutToken.length > 0) {
+      console.log(`⚠️ Found ${membersWithoutToken.length} team members without tokens (may need migration)`);
+    }
+    
+    // Debug: list all team members and their tokens
+    const allMembers = await db.collection("teamMembers").find({}).toArray();
+    console.log(`❌ No team member found with token "${token.substring(0, 20)}...". All team members and their tokens:`);
+    allMembers.forEach(m => {
+      const tokenValue = m.onboardingToken || 'NONE';
+      const tokenLength = tokenValue !== 'NONE' ? tokenValue.length : 0;
+      const tokenPreview = tokenValue !== 'NONE' ? tokenValue.substring(0, 20) + '...' : 'NONE';
+      console.log(`  - ${m.name} (${m.id}): token=${tokenPreview} (length: ${tokenLength})`);
+    });
+    
+    return undefined;
+  }
+
+  async regenerateTeamMemberOnboardingToken(teamMemberId: string): Promise<TeamMember> {
+    const db = await getDb();
+    const newToken = nanoid(32);
+    console.log(`🔄 Regenerating token for team member ${teamMemberId}`);
+    console.log(`   New token: ${newToken.substring(0, 20)}... (length: ${newToken.length})`);
+    
+    const result = await db.collection("teamMembers").findOneAndUpdate(
+      { id: teamMemberId },
+      { $set: { onboardingToken: newToken, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+    
+    if (!result) {
+      console.log(`❌ Team member ${teamMemberId} not found for token regeneration`);
+      throw new Error("Team member not found");
+    }
+    
+    console.log(`✅ Token regenerated for ${result.name}, new token saved: ${result.onboardingToken?.substring(0, 20)}...`);
+    
+    // Verify the token was actually saved
+    const verify = await db.collection("teamMembers").findOne({ id: teamMemberId });
+    if (verify?.onboardingToken !== newToken) {
+      console.error(`❌ Token mismatch! Expected: ${newToken.substring(0, 20)}..., Got: ${verify?.onboardingToken?.substring(0, 20)}...`);
+    } else {
+      console.log(`✅ Token verified in database`);
+    }
+    
     return toSchema<TeamMember>(result);
   }
 
@@ -1788,6 +2161,1571 @@ export class DatabaseStorage implements IStorage {
     const result = await db.collection("salaryPayments").deleteOne({ id });
     console.log(`Delete result:`, result);
     if (result.deletedCount === 0) throw new Error("Salary payment not found");
+  }
+
+  // ============================================
+  // MARKETING MODULE - PROPOSAL METHODS
+  // ============================================
+  
+  private proposalCounter: number = 1;
+
+  async getProposals(filters?: { clientId?: string; status?: string }): Promise<ProposalWithRelations[]> {
+    const db = await getDb();
+    const query: any = {};
+    
+    if (filters?.clientId) {
+      query.clientId = filters.clientId;
+    }
+    
+    if (filters?.status) {
+      query.status = filters.status;
+    }
+    
+    const proposalList = await db.collection("proposals")
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
+    
+    const proposalsWithRelations: ProposalWithRelations[] = await Promise.all(
+      proposalList.map(async (proposal: any) => {
+        const prop = toSchema<Proposal>(proposal);
+        const client = await db.collection("clients").findOne({ id: prop.clientId });
+        const clientData = client ? toSchema<Client>(client) : null;
+        
+        return {
+          ...prop,
+          clientName: clientData?.name || "",
+        };
+      })
+    );
+    
+    return proposalsWithRelations;
+  }
+
+  async getProposalById(id: string): Promise<ProposalWithRelations | undefined> {
+    const db = await getDb();
+    const proposal = await db.collection("proposals").findOne({ id });
+    if (!proposal) return undefined;
+    
+    const prop = toSchema<Proposal>(proposal);
+    const client = await db.collection("clients").findOne({ id: prop.clientId });
+    const clientData = client ? toSchema<Client>(client) : null;
+    
+    return {
+      ...prop,
+      clientName: clientData?.name || "",
+    };
+  }
+
+  async createProposal(proposal: InsertProposal): Promise<Proposal> {
+    const db = await getDb();
+    const proposalNumber = proposal.proposalNumber || `PROP-${String(this.proposalCounter++).padStart(4, "0")}`;
+    
+    const newProposal = {
+      id: nanoid(),
+      ...proposal,
+      proposalNumber,
+      validUntil: new Date(proposal.validUntil),
+      projectStartDate: proposal.projectStartDate ? new Date(proposal.projectStartDate) : null,
+      projectEndDate: proposal.projectEndDate ? new Date(proposal.projectEndDate) : null,
+      paymentSchedule: (proposal.paymentSchedule || []).map((ps: any) => ({
+        ...ps,
+        dueDate: ps.dueDate ? new Date(ps.dueDate) : null,
+      })),
+      sentAt: null,
+      viewedAt: null,
+      respondedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    await db.collection("proposals").insertOne(toMongo(newProposal));
+    return toSchema<Proposal>(newProposal);
+  }
+
+  async updateProposal(id: string, proposal: Partial<InsertProposal>): Promise<Proposal> {
+    const db = await getDb();
+    const updateData: any = { ...proposal, updatedAt: new Date() };
+    
+    if (proposal.validUntil) updateData.validUntil = new Date(proposal.validUntil);
+    if (proposal.projectStartDate !== undefined) {
+      updateData.projectStartDate = proposal.projectStartDate ? new Date(proposal.projectStartDate) : null;
+    }
+    if (proposal.projectEndDate !== undefined) {
+      updateData.projectEndDate = proposal.projectEndDate ? new Date(proposal.projectEndDate) : null;
+    }
+    if (proposal.paymentSchedule) {
+      updateData.paymentSchedule = proposal.paymentSchedule.map((ps: any) => ({
+        ...ps,
+        dueDate: ps.dueDate ? new Date(ps.dueDate) : null,
+      }));
+    }
+    
+    const result = await db.collection("proposals").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
+    
+    if (!result) throw new Error("Proposal not found");
+    return toSchema<Proposal>(result);
+  }
+
+  async updateProposalStatus(id: string, status: string): Promise<Proposal> {
+    const db = await getDb();
+    const updateData: any = { status, updatedAt: new Date() };
+    
+    // Track status changes
+    if (status === "SENT") updateData.sentAt = new Date();
+    if (status === "VIEWED") updateData.viewedAt = new Date();
+    if (["ACCEPTED", "REJECTED"].includes(status)) updateData.respondedAt = new Date();
+    
+    const result = await db.collection("proposals").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
+    
+    if (!result) throw new Error("Proposal not found");
+    return toSchema<Proposal>(result);
+  }
+
+  async deleteProposal(id: string): Promise<void> {
+    const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
+    
+    const result = await db.collection("proposals").deleteOne({ id });
+    if (result.deletedCount === 0) throw new Error("Proposal not found");
+  }
+
+  // ============================================
+  // MARKETING MODULE - CONTRACT METHODS
+  // ============================================
+  
+  private contractCounter: number = 1;
+
+  async getContracts(filters?: { clientId?: string; status?: string }): Promise<ContractWithRelations[]> {
+    const db = await getDb();
+    const query: any = {};
+    
+    if (filters?.clientId) {
+      query.clientId = filters.clientId;
+    }
+    
+    if (filters?.status) {
+      query.status = filters.status;
+    }
+    
+    const contractList = await db.collection("contracts")
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
+    
+    const contractsWithRelations: ContractWithRelations[] = await Promise.all(
+      contractList.map(async (contract: any) => {
+        const cont = toSchema<Contract>(contract);
+        const client = await db.collection("clients").findOne({ id: cont.clientId });
+        const clientData = client ? toSchema<Client>(client) : null;
+        
+        let proposalTitle: string | undefined;
+        if (cont.proposalId) {
+          const proposal = await db.collection("proposals").findOne({ id: cont.proposalId });
+          proposalTitle = proposal ? proposal.title : undefined;
+        }
+        
+        return {
+          ...cont,
+          clientName: clientData?.name || "",
+          proposalTitle,
+        };
+      })
+    );
+    
+    return contractsWithRelations;
+  }
+
+  async getContractById(id: string): Promise<ContractWithRelations | undefined> {
+    const db = await getDb();
+    const contract = await db.collection("contracts").findOne({ id });
+    if (!contract) return undefined;
+    
+    const cont = toSchema<Contract>(contract);
+    const client = await db.collection("clients").findOne({ id: cont.clientId });
+    const clientData = client ? toSchema<Client>(client) : null;
+    
+    let proposalTitle: string | undefined;
+    if (cont.proposalId) {
+      const proposal = await db.collection("proposals").findOne({ id: cont.proposalId });
+      proposalTitle = proposal ? proposal.title : undefined;
+    }
+    
+    return {
+      ...cont,
+      clientName: clientData?.name || "",
+      proposalTitle,
+    };
+  }
+
+  async createContract(contract: InsertContract): Promise<Contract> {
+    const db = await getDb();
+    const contractNumber = contract.contractNumber || `CONTRACT-${String(this.contractCounter++).padStart(4, "0")}`;
+    
+    const newContract = {
+      id: nanoid(),
+      ...contract,
+      contractNumber,
+      startDate: new Date(contract.startDate),
+      endDate: contract.endDate ? new Date(contract.endDate) : null,
+      signedDate: contract.signedDate ? new Date(contract.signedDate) : null,
+      clientSignatureDate: contract.clientSignatureDate ? new Date(contract.clientSignatureDate) : null,
+      agencySignatureDate: contract.agencySignatureDate ? new Date(contract.agencySignatureDate) : null,
+      attachments: (contract.attachments || []).map((att: any) => ({
+        ...att,
+        uploadedAt: new Date(att.uploadedAt),
+      })),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    await db.collection("contracts").insertOne(toMongo(newContract));
+    return toSchema<Contract>(newContract);
+  }
+
+  async updateContract(id: string, contract: Partial<InsertContract>): Promise<Contract> {
+    const db = await getDb();
+    const updateData: any = { ...contract, updatedAt: new Date() };
+    
+    if (contract.startDate) updateData.startDate = new Date(contract.startDate);
+    if (contract.endDate !== undefined) {
+      updateData.endDate = contract.endDate ? new Date(contract.endDate) : null;
+    }
+    if (contract.signedDate !== undefined) {
+      updateData.signedDate = contract.signedDate ? new Date(contract.signedDate) : null;
+    }
+    if (contract.clientSignatureDate !== undefined) {
+      updateData.clientSignatureDate = contract.clientSignatureDate ? new Date(contract.clientSignatureDate) : null;
+    }
+    if (contract.agencySignatureDate !== undefined) {
+      updateData.agencySignatureDate = contract.agencySignatureDate ? new Date(contract.agencySignatureDate) : null;
+    }
+    if (contract.attachments) {
+      updateData.attachments = contract.attachments.map((att: any) => ({
+        ...att,
+        uploadedAt: new Date(att.uploadedAt),
+      }));
+    }
+    
+    const result = await db.collection("contracts").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
+    
+    if (!result) throw new Error("Contract not found");
+    return toSchema<Contract>(result);
+  }
+
+  async updateContractStatus(id: string, status: string): Promise<Contract> {
+    const db = await getDb();
+    const updateData: any = { status, updatedAt: new Date() };
+    
+    // Auto-set signed date when status becomes SIGNED
+    if (status === "SIGNED") {
+      updateData.signedDate = new Date();
+    }
+    
+    const result = await db.collection("contracts").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
+    
+    if (!result) throw new Error("Contract not found");
+    return toSchema<Contract>(result);
+  }
+
+  async deleteContract(id: string): Promise<void> {
+    const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
+    
+    const result = await db.collection("contracts").deleteOne({ id });
+    if (result.deletedCount === 0) throw new Error("Contract not found");
+  }
+
+  // ============================================
+  // MARKETING MODULE - CLIENT ONBOARDING DATA METHODS
+  // ============================================
+
+  async getClientOnboardingData(clientId: string): Promise<ClientOnboardingData | undefined> {
+    const db = await getDb();
+    const data = await db.collection("clientOnboardingData").findOne({ clientId });
+    return data ? toSchema<ClientOnboardingData>(data) : undefined;
+  }
+
+  async createClientOnboardingData(data: InsertClientOnboardingData): Promise<ClientOnboardingData> {
+    const db = await getDb();
+    
+    // Initialize with default structure
+    const defaultBusinessDetails = {
+      status: "NOT_STARTED" as const,
+      legalName: "",
+      tradeName: "",
+      businessType: "",
+      registrationNumber: "",
+      gstNumber: "",
+      panNumber: "",
+      incorporationDate: "",
+      industry: "",
+      employeeCount: "",
+      annualRevenue: "",
+      targetAudience: "",
+      competitors: "",
+      uniqueSellingPoint: "",
+      businessGoals: "",
+      notes: "",
+    };
+    
+    const defaultBrandAssets = {
+      status: "NOT_STARTED" as const,
+      logoUrl: "",
+      logoVariants: [],
+      primaryColors: [],
+      secondaryColors: [],
+      fonts: [],
+      brandGuidelines: "",
+      brandGuidelinesUrl: "",
+      tagline: "",
+      brandVoice: "",
+      brandPersonality: "",
+      doNotUse: "",
+      notes: "",
+    };
+    
+    const defaultWebsiteCredentials = {
+      status: "NOT_STARTED" as const,
+      items: [],
+    };
+    
+    const defaultSocialCredentials = {
+      status: "NOT_STARTED" as const,
+      items: [],
+    };
+    
+    const defaultCrmCredentials = {
+      status: "NOT_STARTED" as const,
+      items: [],
+    };
+    
+    const defaultMarketingReports = {
+      status: "NOT_STARTED" as const,
+      currentMarketingEfforts: "",
+      pastCampaigns: "",
+      whatWorked: "",
+      whatDidntWork: "",
+      items: [],
+    };
+    
+    const defaultProjectDetails = {
+      status: "NOT_STARTED" as const,
+      preferredCommunication: "",
+      meetingAvailability: "",
+      decisionMakers: "",
+      budget: "",
+      timeline: "",
+      priorities: "",
+      expectations: "",
+      kickoffNotes: "",
+    };
+    
+    const newData = {
+      id: nanoid(),
+      clientId: data.clientId,
+      overallStatus: data.overallStatus || "NOT_STARTED",
+      submittedAt: data.submittedAt || null,
+      submittedBy: data.submittedBy || "",
+      businessDetails: { ...defaultBusinessDetails, ...(data.businessDetails || {}) },
+      brandAssets: { ...defaultBrandAssets, ...(data.brandAssets || {}) },
+      websiteCredentials: { ...defaultWebsiteCredentials, ...(data.websiteCredentials || {}) },
+      socialCredentials: { ...defaultSocialCredentials, ...(data.socialCredentials || {}) },
+      crmCredentials: { ...defaultCrmCredentials, ...(data.crmCredentials || {}) },
+      marketingReports: { ...defaultMarketingReports, ...(data.marketingReports || {}) },
+      projectDetails: { ...defaultProjectDetails, ...(data.projectDetails || {}) },
+      additionalNotes: data.additionalNotes || "",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    await db.collection("clientOnboardingData").insertOne(toMongo(newData));
+    return toSchema<ClientOnboardingData>(newData);
+  }
+
+  async updateClientOnboardingData(id: string, data: Partial<InsertClientOnboardingData>): Promise<ClientOnboardingData> {
+    const db = await getDb();
+    const updateData: any = { ...data, updatedAt: new Date() };
+    
+    // Calculate overall status based on section statuses
+    if (data.businessDetails || data.brandAssets || data.websiteCredentials || 
+        data.socialCredentials || data.marketingReports) {
+      const current = await db.collection("clientOnboardingData").findOne({ id });
+      if (current) {
+        const sections = [
+          data.businessDetails?.status || current.businessDetails?.status,
+          data.brandAssets?.status || current.brandAssets?.status,
+          data.websiteCredentials?.status || current.websiteCredentials?.status,
+          data.socialCredentials?.status || current.socialCredentials?.status,
+          data.marketingReports?.status || current.marketingReports?.status,
+        ];
+        
+        if (sections.every(s => s === "COMPLETED")) {
+          updateData.overallStatus = "COMPLETED";
+        } else if (sections.some(s => s === "IN_PROGRESS" || s === "COMPLETED")) {
+          updateData.overallStatus = "IN_PROGRESS";
+        }
+      }
+    }
+    
+    const result = await db.collection("clientOnboardingData").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
+    
+    if (!result) throw new Error("Client onboarding data not found");
+    return toSchema<ClientOnboardingData>(result);
+  }
+
+  // ============================================
+  // MARKETING MODULE - MONTHLY REPORT METHODS
+  // ============================================
+  
+  private reportCounter: number = 1;
+
+  async getMonthlyReports(filters?: { clientId?: string; projectId?: string; status?: string }): Promise<MonthlyReportWithRelations[]> {
+    const db = await getDb();
+    const query: any = {};
+    
+    if (filters?.clientId) {
+      query.clientId = filters.clientId;
+    }
+    
+    if (filters?.projectId) {
+      query.projectId = filters.projectId;
+    }
+    
+    if (filters?.status) {
+      query.status = filters.status;
+    }
+    
+    const reportList = await db.collection("monthlyReports")
+      .find(query)
+      .sort({ reportMonth: -1, createdAt: -1 })
+      .toArray();
+    
+    const reportsWithRelations: MonthlyReportWithRelations[] = await Promise.all(
+      reportList.map(async (report: any) => {
+        const rep = toSchema<MonthlyReport>(report);
+        const client = await db.collection("clients").findOne({ id: rep.clientId });
+        const clientData = client ? toSchema<Client>(client) : null;
+        
+        let projectName: string | undefined;
+        if (rep.projectId) {
+          const project = await db.collection("projects").findOne({ id: rep.projectId });
+          projectName = project ? project.name : undefined;
+        }
+        
+        return {
+          ...rep,
+          clientName: clientData?.name || "",
+          projectName,
+        };
+      })
+    );
+    
+    return reportsWithRelations;
+  }
+
+  async getMonthlyReportById(id: string): Promise<MonthlyReportWithRelations | undefined> {
+    const db = await getDb();
+    const report = await db.collection("monthlyReports").findOne({ id });
+    if (!report) return undefined;
+    
+    const rep = toSchema<MonthlyReport>(report);
+    const client = await db.collection("clients").findOne({ id: rep.clientId });
+    const clientData = client ? toSchema<Client>(client) : null;
+    
+    let projectName: string | undefined;
+    if (rep.projectId) {
+      const project = await db.collection("projects").findOne({ id: rep.projectId });
+      projectName = project ? project.name : undefined;
+    }
+    
+    return {
+      ...rep,
+      clientName: clientData?.name || "",
+      projectName,
+    };
+  }
+
+  async createMonthlyReport(report: InsertMonthlyReport): Promise<MonthlyReport> {
+    const db = await getDb();
+    const reportNumber = report.reportNumber || `RPT-${String(this.reportCounter++).padStart(4, "0")}`;
+    
+    const newReport = {
+      id: nanoid(),
+      ...report,
+      reportNumber,
+      periodStart: new Date(report.periodStart),
+      periodEnd: new Date(report.periodEnd),
+      attachments: (report.attachments || []).map((att: any) => ({
+        ...att,
+        uploadedAt: new Date(att.uploadedAt),
+      })),
+      sentAt: report.sentAt ? new Date(report.sentAt) : null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    await db.collection("monthlyReports").insertOne(toMongo(newReport));
+    return toSchema<MonthlyReport>(newReport);
+  }
+
+  async updateMonthlyReport(id: string, report: Partial<InsertMonthlyReport>): Promise<MonthlyReport> {
+    const db = await getDb();
+    const updateData: any = { ...report, updatedAt: new Date() };
+    
+    if (report.periodStart) updateData.periodStart = new Date(report.periodStart);
+    if (report.periodEnd) updateData.periodEnd = new Date(report.periodEnd);
+    if (report.sentAt !== undefined) {
+      updateData.sentAt = report.sentAt ? new Date(report.sentAt) : null;
+    }
+    if (report.attachments) {
+      updateData.attachments = report.attachments.map((att: any) => ({
+        ...att,
+        uploadedAt: new Date(att.uploadedAt),
+      }));
+    }
+    
+    const result = await db.collection("monthlyReports").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
+    
+    if (!result) throw new Error("Monthly report not found");
+    return toSchema<MonthlyReport>(result);
+  }
+
+  async updateMonthlyReportStatus(id: string, status: string): Promise<MonthlyReport> {
+    const db = await getDb();
+    const updateData: any = { status, updatedAt: new Date() };
+    
+    if (status === "SENT") {
+      updateData.sentAt = new Date();
+    }
+    
+    const result = await db.collection("monthlyReports").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
+    
+    if (!result) throw new Error("Monthly report not found");
+    return toSchema<MonthlyReport>(result);
+  }
+
+  async deleteMonthlyReport(id: string): Promise<void> {
+    const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
+    
+    const result = await db.collection("monthlyReports").deleteOne({ id });
+    if (result.deletedCount === 0) throw new Error("Monthly report not found");
+  }
+
+  // ============================================
+  // MARKETING MODULE - CLIENT DIGITAL ASSET METHODS
+  // ============================================
+
+  async getClientDigitalAssets(filters?: { clientId?: string; category?: string }): Promise<ClientDigitalAsset[]> {
+    const db = await getDb();
+    const query: any = {};
+    
+    if (filters?.clientId) {
+      query.clientId = filters.clientId;
+    }
+    
+    if (filters?.category) {
+      query.category = filters.category;
+    }
+    
+    const assets = await db.collection("clientDigitalAssets")
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
+    
+    return assets.map(toSchema<ClientDigitalAsset>);
+  }
+
+  async getClientDigitalAssetById(id: string): Promise<ClientDigitalAsset | undefined> {
+    const db = await getDb();
+    const asset = await db.collection("clientDigitalAssets").findOne({ id });
+    return asset ? toSchema<ClientDigitalAsset>(asset) : undefined;
+  }
+
+  async createClientDigitalAsset(asset: InsertClientDigitalAsset): Promise<ClientDigitalAsset> {
+    const db = await getDb();
+    
+    const newAsset = {
+      id: nanoid(),
+      ...asset,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    await db.collection("clientDigitalAssets").insertOne(toMongo(newAsset));
+    return toSchema<ClientDigitalAsset>(newAsset);
+  }
+
+  async updateClientDigitalAsset(id: string, asset: Partial<InsertClientDigitalAsset>): Promise<ClientDigitalAsset> {
+    const db = await getDb();
+    
+    const result = await db.collection("clientDigitalAssets").findOneAndUpdate(
+      { id },
+      { $set: { ...asset, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+    
+    if (!result) throw new Error("Digital asset not found");
+    return toSchema<ClientDigitalAsset>(result);
+  }
+
+  async deleteClientDigitalAsset(id: string): Promise<void> {
+    const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
+
+    const result = await db.collection("clientDigitalAssets").deleteOne({ id });
+    if (result.deletedCount === 0) throw new Error("Digital asset not found");
+  }
+
+  // ============================================
+  // API SETTINGS METHODS
+  // ============================================
+  async getApiSettings(): Promise<ApiSettings | undefined> {
+    const db = await getDb();
+    const settings = await db.collection("apiSettings").findOne({});
+    return settings ? toSchema<ApiSettings>(settings) : undefined;
+  }
+
+  async upsertApiSettings(settings: Partial<InsertApiSettings>): Promise<ApiSettings> {
+    const db = await getDb();
+
+    // Check if settings already exist
+    const existing = await db.collection("apiSettings").findOne({});
+
+    if (existing) {
+      // Update existing settings
+      const result = await db.collection("apiSettings").findOneAndUpdate(
+        { id: existing.id },
+        { $set: { ...settings, updatedAt: new Date() } },
+        { returnDocument: "after" }
+      );
+      if (!result) throw new Error("Failed to update API settings");
+      return toSchema<ApiSettings>(result);
+    } else {
+      // Create new settings
+      const newSettings = {
+        id: nanoid(),
+        openaiApiKey: settings.openaiApiKey || "",
+        geminiApiKey: settings.geminiApiKey || "",
+        resendApiKey: settings.resendApiKey || "",
+        senderEmail: settings.senderEmail || "",
+        senderName: settings.senderName || "",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await db.collection("apiSettings").insertOne(toMongo(newSettings));
+      return toSchema<ApiSettings>(newSettings);
+    }
+  }
+
+  // ============================================
+  // ATTENDANCE METHODS
+  // ============================================
+  async getAttendance(filters?: { teamMemberId?: string; fromDate?: string; toDate?: string; status?: string }): Promise<AttendanceWithMember[]> {
+    const db = await getDb();
+    const query: any = {};
+
+    if (filters?.teamMemberId) query.teamMemberId = filters.teamMemberId;
+    if (filters?.status) query.status = filters.status;
+    if (filters?.fromDate || filters?.toDate) {
+      query.date = {};
+      if (filters.fromDate) query.date.$gte = new Date(filters.fromDate);
+      if (filters.toDate) query.date.$lte = new Date(filters.toDate);
+    }
+
+    const records = await db.collection("attendance").find(query).sort({ date: -1 }).toArray();
+
+    // Get team member details
+    const memberIds = Array.from(new Set(records.map(r => r.teamMemberId)));
+    const members = await db.collection("teamMembers").find({ id: { $in: memberIds } }).toArray();
+    const memberMap = new Map(members.map(m => [m.id, m]));
+
+    return records.map(record => {
+      const member = memberMap.get(record.teamMemberId);
+      return {
+        ...toSchema<Attendance>(record),
+        memberName: member?.name,
+        memberEmail: member?.email,
+      };
+    });
+  }
+
+  async getAttendanceById(id: string): Promise<Attendance | undefined> {
+    const db = await getDb();
+    const record = await db.collection("attendance").findOne({ id });
+    return record ? toSchema<Attendance>(record) : undefined;
+  }
+
+  async createAttendance(attendance: InsertAttendance): Promise<Attendance> {
+    const db = await getDb();
+    const newRecord = {
+      id: nanoid(),
+      ...attendance,
+      date: new Date(attendance.date),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("attendance").insertOne(toMongo(newRecord));
+    return toSchema<Attendance>(newRecord);
+  }
+
+  async createBulkAttendance(records: InsertAttendance[]): Promise<Attendance[]> {
+    const db = await getDb();
+    const newRecords = records.map(record => ({
+      id: nanoid(),
+      ...record,
+      date: new Date(record.date),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    await db.collection("attendance").insertMany(newRecords.map(toMongo));
+    return newRecords.map(r => toSchema<Attendance>(r));
+  }
+
+  async updateAttendance(id: string, attendance: Partial<InsertAttendance>): Promise<Attendance> {
+    const db = await getDb();
+    const updateData: any = { ...attendance, updatedAt: new Date() };
+    if (attendance.date) updateData.date = new Date(attendance.date);
+
+    const result = await db.collection("attendance").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
+    if (!result) throw new Error("Attendance record not found");
+    return toSchema<Attendance>(result);
+  }
+
+  async deleteAttendance(id: string): Promise<void> {
+    const db = await getDb();
+    const result = await db.collection("attendance").deleteOne({ id });
+    if (result.deletedCount === 0) throw new Error("Attendance record not found");
+  }
+
+  // ============================================
+  // LEAVE TYPE METHODS
+  // ============================================
+  async getLeaveTypes(filters?: { isActive?: boolean }): Promise<LeaveType[]> {
+    const db = await getDb();
+    const query: any = {};
+    if (filters?.isActive !== undefined) query.isActive = filters.isActive;
+
+    const types = await db.collection("leaveTypes").find(query).sort({ name: 1 }).toArray();
+    return types.map(t => toSchema<LeaveType>(t));
+  }
+
+  async getLeaveTypeById(id: string): Promise<LeaveType | undefined> {
+    const db = await getDb();
+    const type = await db.collection("leaveTypes").findOne({ id });
+    return type ? toSchema<LeaveType>(type) : undefined;
+  }
+
+  async createLeaveType(leaveType: InsertLeaveType): Promise<LeaveType> {
+    const db = await getDb();
+    const newType = {
+      id: nanoid(),
+      ...leaveType,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("leaveTypes").insertOne(toMongo(newType));
+    return toSchema<LeaveType>(newType);
+  }
+
+  async updateLeaveType(id: string, leaveType: Partial<InsertLeaveType>): Promise<LeaveType> {
+    const db = await getDb();
+    const result = await db.collection("leaveTypes").findOneAndUpdate(
+      { id },
+      { $set: { ...leaveType, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+    if (!result) throw new Error("Leave type not found");
+    return toSchema<LeaveType>(result);
+  }
+
+  async seedDefaultLeaveTypes(): Promise<void> {
+    const db = await getDb();
+    const existingCount = await db.collection("leaveTypes").countDocuments();
+    if (existingCount > 0) return;
+
+    const defaultTypes = [
+      { name: "Casual Leave", code: "CL", category: "CASUAL", description: "For personal or casual reasons", isPaid: true, isActive: true },
+      { name: "Sick Leave", code: "SL", category: "SICK", description: "For health-related absences", isPaid: true, isActive: true },
+      { name: "Earned Leave", code: "EL", category: "EARNED", description: "Accrued leave based on service", isPaid: true, isActive: true },
+    ];
+
+    for (const type of defaultTypes) {
+      await this.createLeaveType(type as InsertLeaveType);
+    }
+  }
+
+  // ============================================
+  // LEAVE POLICY METHODS
+  // ============================================
+  async getLeavePolicies(filters?: { jobRoleId?: string; leaveTypeId?: string }): Promise<LeavePolicyWithDetails[]> {
+    const db = await getDb();
+    const query: any = {};
+    if (filters?.jobRoleId) query.jobRoleId = filters.jobRoleId;
+    if (filters?.leaveTypeId) query.leaveTypeId = filters.leaveTypeId;
+
+    const policies = await db.collection("leavePolicies").find(query).toArray();
+
+    // Get job roles and leave types
+    const jobRoleIds = Array.from(new Set(policies.map(p => p.jobRoleId)));
+    const leaveTypeIds = Array.from(new Set(policies.map(p => p.leaveTypeId)));
+
+    const jobRoles = await db.collection("jobRoles").find({ id: { $in: jobRoleIds } }).toArray();
+    const leaveTypes = await db.collection("leaveTypes").find({ id: { $in: leaveTypeIds } }).toArray();
+
+    const roleMap = new Map(jobRoles.map(r => [r.id, r]));
+    const typeMap = new Map(leaveTypes.map(t => [t.id, t]));
+
+    return policies.map(policy => {
+      const role = roleMap.get(policy.jobRoleId);
+      const type = typeMap.get(policy.leaveTypeId);
+      return {
+        ...toSchema<LeavePolicy>(policy),
+        jobRoleTitle: role?.title,
+        leaveTypeName: type?.name,
+        leaveTypeCode: type?.code,
+      };
+    });
+  }
+
+  async getLeavePolicyById(id: string): Promise<LeavePolicy | undefined> {
+    const db = await getDb();
+    const policy = await db.collection("leavePolicies").findOne({ id });
+    return policy ? toSchema<LeavePolicy>(policy) : undefined;
+  }
+
+  async createLeavePolicy(policy: InsertLeavePolicy): Promise<LeavePolicy> {
+    const db = await getDb();
+    const newPolicy = {
+      id: nanoid(),
+      ...policy,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("leavePolicies").insertOne(toMongo(newPolicy));
+    return toSchema<LeavePolicy>(newPolicy);
+  }
+
+  async updateLeavePolicy(id: string, policy: Partial<InsertLeavePolicy>): Promise<LeavePolicy> {
+    const db = await getDb();
+    const result = await db.collection("leavePolicies").findOneAndUpdate(
+      { id },
+      { $set: { ...policy, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+    if (!result) throw new Error("Leave policy not found");
+    return toSchema<LeavePolicy>(result);
+  }
+
+  async deleteLeavePolicy(id: string): Promise<void> {
+    const db = await getDb();
+    const result = await db.collection("leavePolicies").deleteOne({ id });
+    if (result.deletedCount === 0) throw new Error("Leave policy not found");
+  }
+
+  async seedDefaultLeavePolicies(): Promise<{ created: number; skipped: number }> {
+    const db = await getDb();
+
+    // Get all active job roles (job roles use status: "ACTIVE")
+    const jobRoles = await db.collection("jobRoles").find({ status: "ACTIVE" }).toArray();
+
+    // Get all active leave types (leave types use isActive: true)
+    const leaveTypes = await db.collection("leaveTypes").find({ isActive: true }).toArray();
+
+    console.log(`Found ${jobRoles.length} job roles and ${leaveTypes.length} leave types for policy generation`);
+
+    if (jobRoles.length === 0 || leaveTypes.length === 0) {
+      return { created: 0, skipped: 0 };
+    }
+
+    // Default quotas per leave type category
+    const defaultQuotas: Record<string, { annual: number; carryForward: number }> = {
+      "CASUAL": { annual: 12, carryForward: 3 },
+      "SICK": { annual: 10, carryForward: 0 },
+      "EARNED": { annual: 15, carryForward: 5 },
+      "MATERNITY": { annual: 180, carryForward: 0 },
+      "PATERNITY": { annual: 15, carryForward: 0 },
+      "UNPAID": { annual: 30, carryForward: 0 },
+      "COMPENSATORY": { annual: 10, carryForward: 5 },
+      "OTHER": { annual: 5, carryForward: 0 },
+    };
+
+    let created = 0;
+    let skipped = 0;
+
+    // Create policies for each combination of job role and leave type
+    for (const role of jobRoles) {
+      for (const leaveType of leaveTypes) {
+        // Check if policy already exists
+        const existing = await db.collection("leavePolicies").findOne({
+          jobRoleId: role.id,
+          leaveTypeId: leaveType.id,
+        });
+
+        if (existing) {
+          skipped++;
+          continue;
+        }
+
+        // Get default quota based on category
+        const quota = defaultQuotas[leaveType.category] || defaultQuotas["OTHER"];
+
+        const newPolicy = {
+          id: nanoid(),
+          jobRoleId: role.id,
+          leaveTypeId: leaveType.id,
+          annualQuota: quota.annual,
+          carryForwardLimit: quota.carryForward,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        await db.collection("leavePolicies").insertOne(toMongo(newPolicy));
+        created++;
+      }
+    }
+
+    return { created, skipped };
+  }
+
+  // ============================================
+  // LEAVE REQUEST METHODS
+  // ============================================
+  async getLeaveRequests(filters?: { teamMemberId?: string; status?: string; fromDate?: string; toDate?: string }): Promise<LeaveRequestWithDetails[]> {
+    const db = await getDb();
+    const query: any = {};
+
+    if (filters?.teamMemberId) query.teamMemberId = filters.teamMemberId;
+    if (filters?.status) query.status = filters.status;
+    if (filters?.fromDate || filters?.toDate) {
+      query.startDate = {};
+      if (filters.fromDate) query.startDate.$gte = new Date(filters.fromDate);
+      if (filters.toDate) query.startDate.$lte = new Date(filters.toDate);
+    }
+
+    const requests = await db.collection("leaveRequests").find(query).sort({ createdAt: -1 }).toArray();
+
+    // Get related data
+    const memberIds = Array.from(new Set(requests.map(r => r.teamMemberId)));
+    const leaveTypeIds = Array.from(new Set(requests.map(r => r.leaveTypeId)));
+    const approverIds = requests.filter(r => r.approvedBy).map(r => r.approvedBy);
+
+    const members = await db.collection("teamMembers").find({ id: { $in: memberIds } }).toArray();
+    const leaveTypes = await db.collection("leaveTypes").find({ id: { $in: leaveTypeIds } }).toArray();
+    const approvers = approverIds.length > 0 ? await db.collection("users").find({ id: { $in: approverIds } }).toArray() : [];
+
+    const memberMap = new Map(members.map(m => [m.id, m]));
+    const typeMap = new Map(leaveTypes.map(t => [t.id, t]));
+    const approverMap = new Map(approvers.map(a => [a.id, a]));
+
+    return requests.map(request => {
+      const member = memberMap.get(request.teamMemberId);
+      const type = typeMap.get(request.leaveTypeId);
+      const approver = request.approvedBy ? approverMap.get(request.approvedBy) : null;
+      return {
+        ...toSchema<LeaveRequest>(request),
+        memberName: member?.name,
+        memberEmail: member?.email,
+        leaveTypeName: type?.name,
+        leaveTypeCode: type?.code,
+        approverName: approver?.name,
+      };
+    });
+  }
+
+  async getLeaveRequestById(id: string): Promise<LeaveRequestWithDetails | undefined> {
+    const db = await getDb();
+    const request = await db.collection("leaveRequests").findOne({ id });
+    if (!request) return undefined;
+
+    const member = await db.collection("teamMembers").findOne({ id: request.teamMemberId });
+    const type = await db.collection("leaveTypes").findOne({ id: request.leaveTypeId });
+    const approver = request.approvedBy ? await db.collection("users").findOne({ id: request.approvedBy }) : null;
+
+    return {
+      ...toSchema<LeaveRequest>(request),
+      memberName: member?.name,
+      memberEmail: member?.email,
+      leaveTypeName: type?.name,
+      leaveTypeCode: type?.code,
+      approverName: approver?.name,
+    };
+  }
+
+  async createLeaveRequest(request: InsertLeaveRequest): Promise<LeaveRequest> {
+    const db = await getDb();
+    const newRequest = {
+      id: nanoid(),
+      ...request,
+      startDate: new Date(request.startDate),
+      endDate: new Date(request.endDate),
+      approvedBy: null,
+      approvedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("leaveRequests").insertOne(toMongo(newRequest));
+
+    // Update leave balance pending count
+    const year = new Date(request.startDate).getFullYear();
+    await this.recalculateLeaveBalance(request.teamMemberId, request.leaveTypeId, year);
+
+    return toSchema<LeaveRequest>(newRequest);
+  }
+
+  async updateLeaveRequest(id: string, request: Partial<InsertLeaveRequest>): Promise<LeaveRequest> {
+    const db = await getDb();
+    const updateData: any = { ...request, updatedAt: new Date() };
+    if (request.startDate) updateData.startDate = new Date(request.startDate);
+    if (request.endDate) updateData.endDate = new Date(request.endDate);
+    if (request.approvedAt) updateData.approvedAt = new Date(request.approvedAt);
+
+    const result = await db.collection("leaveRequests").findOneAndUpdate(
+      { id },
+      { $set: updateData },
+      { returnDocument: "after" }
+    );
+    if (!result) throw new Error("Leave request not found");
+    return toSchema<LeaveRequest>(result);
+  }
+
+  async approveLeaveRequest(id: string, approvedBy: string): Promise<LeaveRequest> {
+    const db = await getDb();
+    const request = await db.collection("leaveRequests").findOne({ id });
+    if (!request) throw new Error("Leave request not found");
+
+    const result = await db.collection("leaveRequests").findOneAndUpdate(
+      { id },
+      {
+        $set: {
+          status: "APPROVED",
+          approvedBy,
+          approvedAt: new Date(),
+          updatedAt: new Date()
+        }
+      },
+      { returnDocument: "after" }
+    );
+
+    // Update leave balance
+    const year = new Date(request.startDate).getFullYear();
+    await this.recalculateLeaveBalance(request.teamMemberId, request.leaveTypeId, year);
+
+    return toSchema<LeaveRequest>(result!);
+  }
+
+  async rejectLeaveRequest(id: string, rejectionReason: string): Promise<LeaveRequest> {
+    const db = await getDb();
+    const request = await db.collection("leaveRequests").findOne({ id });
+    if (!request) throw new Error("Leave request not found");
+
+    const result = await db.collection("leaveRequests").findOneAndUpdate(
+      { id },
+      {
+        $set: {
+          status: "REJECTED",
+          rejectionReason,
+          updatedAt: new Date()
+        }
+      },
+      { returnDocument: "after" }
+    );
+
+    // Update leave balance
+    const year = new Date(request.startDate).getFullYear();
+    await this.recalculateLeaveBalance(request.teamMemberId, request.leaveTypeId, year);
+
+    return toSchema<LeaveRequest>(result!);
+  }
+
+  async cancelLeaveRequest(id: string): Promise<LeaveRequest> {
+    const db = await getDb();
+    const request = await db.collection("leaveRequests").findOne({ id });
+    if (!request) throw new Error("Leave request not found");
+
+    const result = await db.collection("leaveRequests").findOneAndUpdate(
+      { id },
+      { $set: { status: "CANCELLED", updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+
+    // Update leave balance
+    const year = new Date(request.startDate).getFullYear();
+    await this.recalculateLeaveBalance(request.teamMemberId, request.leaveTypeId, year);
+
+    return toSchema<LeaveRequest>(result!);
+  }
+
+  async deleteLeaveRequest(id: string): Promise<void> {
+    const db = await getDb();
+    const request = await db.collection("leaveRequests").findOne({ id });
+    if (!request) throw new Error("Leave request not found");
+
+    // Delete the request
+    const result = await db.collection("leaveRequests").deleteOne({ id });
+    if (result.deletedCount === 0) throw new Error("Failed to delete leave request");
+
+    // Recalculate leave balance after deletion
+    const year = new Date(request.startDate).getFullYear();
+    await this.recalculateLeaveBalance(request.teamMemberId, request.leaveTypeId, year);
+  }
+
+  // ============================================
+  // LEAVE BALANCE METHODS
+  // ============================================
+  async getLeaveBalances(filters?: { teamMemberId?: string; year?: number }): Promise<LeaveBalanceWithDetails[]> {
+    const db = await getDb();
+    const query: any = {};
+    if (filters?.teamMemberId) query.teamMemberId = filters.teamMemberId;
+    if (filters?.year) query.year = filters.year;
+
+    const balances = await db.collection("leaveBalances").find(query).toArray();
+
+    // Get related data
+    const memberIds = Array.from(new Set(balances.map(b => b.teamMemberId)));
+    const leaveTypeIds = Array.from(new Set(balances.map(b => b.leaveTypeId)));
+
+    const members = await db.collection("teamMembers").find({ id: { $in: memberIds } }).toArray();
+    const leaveTypes = await db.collection("leaveTypes").find({ id: { $in: leaveTypeIds } }).toArray();
+
+    const memberMap = new Map(members.map(m => [m.id, m]));
+    const typeMap = new Map(leaveTypes.map(t => [t.id, t]));
+
+    return balances.map(balance => {
+      const member = memberMap.get(balance.teamMemberId);
+      const type = typeMap.get(balance.leaveTypeId);
+      return {
+        ...toSchema<LeaveBalance>(balance),
+        memberName: member?.name,
+        leaveTypeName: type?.name,
+        leaveTypeCode: type?.code,
+      };
+    });
+  }
+
+  async getLeaveBalanceById(id: string): Promise<LeaveBalance | undefined> {
+    const db = await getDb();
+    const balance = await db.collection("leaveBalances").findOne({ id });
+    return balance ? toSchema<LeaveBalance>(balance) : undefined;
+  }
+
+  async createLeaveBalance(balance: InsertLeaveBalance): Promise<LeaveBalance> {
+    const db = await getDb();
+    const newBalance = {
+      id: nanoid(),
+      ...balance,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("leaveBalances").insertOne(toMongo(newBalance));
+    return toSchema<LeaveBalance>(newBalance);
+  }
+
+  async updateLeaveBalance(id: string, balance: Partial<InsertLeaveBalance>): Promise<LeaveBalance> {
+    const db = await getDb();
+    const result = await db.collection("leaveBalances").findOneAndUpdate(
+      { id },
+      { $set: { ...balance, updatedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+    if (!result) throw new Error("Leave balance not found");
+    return toSchema<LeaveBalance>(result);
+  }
+
+  async reinitializeLeaveBalancesForMember(teamMemberId: string): Promise<LeaveBalance[]> {
+    const db = await getDb();
+    const currentYear = new Date().getFullYear();
+
+    // Delete existing balances for current year
+    await db.collection("leaveBalances").deleteMany({
+      teamMemberId,
+      year: currentYear,
+    });
+
+    // Get member's joined date
+    const member = await db.collection("teamMembers").findOne({ id: teamMemberId });
+    if (!member) throw new Error("Team member not found");
+
+    const joinedDate = member.joinedDate ? new Date(member.joinedDate) : new Date();
+    return this.initializeLeaveBalancesForMember(teamMemberId, joinedDate);
+  }
+
+  async initializeLeaveBalancesForMember(teamMemberId: string, joinedDate: Date): Promise<LeaveBalance[]> {
+    const db = await getDb();
+    const currentYear = new Date().getFullYear();
+    const joinedYear = joinedDate.getFullYear();
+    const joinedMonth = joinedDate.getMonth();
+
+    // Get team member's job role to find applicable policies
+    const member = await db.collection("teamMembers").findOne({ id: teamMemberId });
+    if (!member) throw new Error("Team member not found");
+
+    // Find the job role by title to get its ID
+    const jobRole = await db.collection("jobRoles").findOne({ title: member.roleTitle });
+    const jobRoleId = jobRole?.id;
+
+    // Get leave policies for this role
+    let policies: any[] = [];
+    if (jobRoleId) {
+      policies = await db.collection("leavePolicies").find({
+        jobRoleId: jobRoleId,
+        isActive: true
+      }).toArray();
+    }
+
+    // If no policies found for this role, try to use any default policy
+    const leaveTypes = await db.collection("leaveTypes").find({ isActive: true }).toArray();
+
+    // Default quotas per leave type category (used when no policy exists)
+    const defaultQuotas: Record<string, number> = {
+      "CASUAL": 12,
+      "SICK": 10,
+      "EARNED": 15,
+      "MATERNITY": 180,
+      "PATERNITY": 15,
+      "UNPAID": 30,
+      "COMPENSATORY": 10,
+      "OTHER": 5,
+    };
+
+    const balances: LeaveBalance[] = [];
+
+    for (const type of leaveTypes) {
+      const policy = policies.find(p => p.leaveTypeId === type.id);
+      // Use policy quota if exists, otherwise use default based on category
+      const annualQuota = policy?.annualQuota ?? defaultQuotas[type.category] ?? 10;
+
+      // Calculate pro-rata quota if joined mid-year
+      let proRataQuota = annualQuota;
+      if (joinedYear === currentYear) {
+        const remainingMonths = 12 - joinedMonth;
+        proRataQuota = Math.round((annualQuota * remainingMonths / 12) * 100) / 100;
+      }
+
+      // Check if balance already exists
+      const existing = await db.collection("leaveBalances").findOne({
+        teamMemberId,
+        leaveTypeId: type.id,
+        year: currentYear,
+      });
+
+      if (!existing) {
+        const balance = await this.createLeaveBalance({
+          teamMemberId,
+          leaveTypeId: type.id,
+          year: currentYear,
+          totalQuota: proRataQuota,
+          used: 0,
+          pending: 0,
+          available: proRataQuota,
+          carryForward: 0,
+        });
+        balances.push(balance);
+      }
+    }
+
+    return balances;
+  }
+
+  async recalculateLeaveBalance(teamMemberId: string, leaveTypeId: string, year: number): Promise<LeaveBalance> {
+    const db = await getDb();
+
+    // Get all leave requests for this member, type, and year
+    const startOfYear = new Date(year, 0, 1);
+    const endOfYear = new Date(year, 11, 31);
+
+    const requests = await db.collection("leaveRequests").find({
+      teamMemberId,
+      leaveTypeId,
+      startDate: { $gte: startOfYear, $lte: endOfYear },
+    }).toArray();
+
+    // Calculate used (approved) and pending days
+    let used = 0;
+    let pending = 0;
+
+    for (const req of requests) {
+      if (req.status === "APPROVED") {
+        used += req.totalDays;
+      } else if (req.status === "PENDING") {
+        pending += req.totalDays;
+      }
+    }
+
+    // Get or create leave balance
+    let balance = await db.collection("leaveBalances").findOne({
+      teamMemberId,
+      leaveTypeId,
+      year,
+    });
+
+    if (!balance) {
+      // Initialize balance if doesn't exist
+      const member = await db.collection("teamMembers").findOne({ id: teamMemberId });
+      const joinedDate = member?.joinedDate ? new Date(member.joinedDate) : new Date();
+      await this.initializeLeaveBalancesForMember(teamMemberId, joinedDate);
+      balance = await db.collection("leaveBalances").findOne({
+        teamMemberId,
+        leaveTypeId,
+        year,
+      });
+    }
+
+    if (balance) {
+      const available = Math.max(0, (balance.totalQuota || 0) + (balance.carryForward || 0) - used - pending);
+
+      const result = await db.collection("leaveBalances").findOneAndUpdate(
+        { id: balance.id },
+        {
+          $set: {
+            used,
+            pending,
+            available,
+            updatedAt: new Date()
+          }
+        },
+        { returnDocument: "after" }
+      );
+      return toSchema<LeaveBalance>(result!);
+    }
+
+    throw new Error("Could not create or find leave balance");
+  }
+
+  async checkLeaveAvailability(
+    teamMemberId: string,
+    leaveTypeId: string,
+    requestedDays: number,
+    year?: number
+  ): Promise<{
+    available: boolean;
+    balance: number;
+    pending: number;
+    used: number;
+    totalQuota: number;
+    requestedDays: number;
+    shortfall: number;
+    leaveTypeName?: string;
+    message: string;
+  }> {
+    const db = await getDb();
+    const currentYear = year || new Date().getFullYear();
+
+    // Get leave type details
+    const leaveType = await db.collection("leaveTypes").findOne({ id: leaveTypeId });
+    const leaveTypeName = leaveType?.name || "Unknown";
+
+    // Get or initialize leave balance
+    let balance = await db.collection("leaveBalances").findOne({
+      teamMemberId,
+      leaveTypeId,
+      year: currentYear,
+    });
+
+    // If balance doesn't exist, initialize it
+    if (!balance) {
+      const member = await db.collection("teamMembers").findOne({ id: teamMemberId });
+      if (!member) {
+        return {
+          available: false,
+          balance: 0,
+          pending: 0,
+          used: 0,
+          totalQuota: 0,
+          requestedDays,
+          shortfall: requestedDays,
+          leaveTypeName,
+          message: "Team member not found",
+        };
+      }
+      const joinedDate = member.joinedDate ? new Date(member.joinedDate) : new Date();
+      await this.initializeLeaveBalancesForMember(teamMemberId, joinedDate);
+      balance = await db.collection("leaveBalances").findOne({
+        teamMemberId,
+        leaveTypeId,
+        year: currentYear,
+      });
+    }
+
+    if (!balance) {
+      return {
+        available: false,
+        balance: 0,
+        pending: 0,
+        used: 0,
+        totalQuota: 0,
+        requestedDays,
+        shortfall: requestedDays,
+        leaveTypeName,
+        message: `No leave balance found for ${leaveTypeName}. Please contact HR to set up your leave policy.`,
+      };
+    }
+
+    const totalQuota = (balance.totalQuota || 0) + (balance.carryForward || 0);
+    const used = balance.used || 0;
+    const pending = balance.pending || 0;
+    const availableBalance = Math.max(0, totalQuota - used - pending);
+    const shortfall = Math.max(0, requestedDays - availableBalance);
+    const isAvailable = requestedDays <= availableBalance;
+
+    let message = "";
+    if (isAvailable) {
+      message = `You have ${availableBalance} ${leaveTypeName} days available. After this request, you will have ${availableBalance - requestedDays} days remaining.`;
+    } else {
+      message = `Insufficient ${leaveTypeName} balance. You have ${availableBalance} days available but requested ${requestedDays} days. You are short by ${shortfall} days.`;
+    }
+
+    return {
+      available: isAvailable,
+      balance: availableBalance,
+      pending,
+      used,
+      totalQuota,
+      requestedDays,
+      shortfall,
+      leaveTypeName,
+      message,
+    };
+  }
+
+  // ============================================
+  // SLACK INTEGRATION METHODS
+  // ============================================
+
+  async getSlackSettings(): Promise<SlackSettings | undefined> {
+    const db = await getDb();
+    const settings = await db.collection("slackSettings").findOne({});
+    return settings ? toSchema<SlackSettings>(settings) : undefined;
+  }
+
+  async saveSlackSettings(settings: InsertSlackSettings): Promise<SlackSettings> {
+    const db = await getDb();
+
+    // Remove existing settings first (only one Slack configuration allowed)
+    await db.collection("slackSettings").deleteMany({});
+
+    const newSettings = {
+      id: nanoid(),
+      ...settings,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("slackSettings").insertOne(toMongo(newSettings));
+    return toSchema<SlackSettings>(newSettings);
+  }
+
+  async updateSlackSettings(id: string, settings: Partial<InsertSlackSettings>): Promise<SlackSettings> {
+    const db = await getDb();
+    await db.collection("slackSettings").updateOne(
+      { id },
+      { $set: { ...settings, updatedAt: new Date() } }
+    );
+    const updated = await db.collection("slackSettings").findOne({ id });
+    return toSchema<SlackSettings>(updated);
+  }
+
+  async deleteSlackSettings(): Promise<void> {
+    const db = await getDb();
+    await db.collection("slackSettings").deleteMany({});
+  }
+
+  // Slack Attendance Log methods
+  async getSlackAttendanceLogs(filters?: { teamMemberId?: string; fromDate?: string; toDate?: string; eventType?: string }): Promise<SlackAttendanceLogWithDetails[]> {
+    const db = await getDb();
+    const query: any = {};
+
+    if (filters?.teamMemberId) {
+      query.teamMemberId = filters.teamMemberId;
+    }
+    if (filters?.eventType) {
+      query.eventType = filters.eventType;
+    }
+    if (filters?.fromDate || filters?.toDate) {
+      query.timestamp = {};
+      if (filters.fromDate) {
+        query.timestamp.$gte = new Date(filters.fromDate);
+      }
+      if (filters.toDate) {
+        query.timestamp.$lte = new Date(filters.toDate);
+      }
+    }
+
+    const logs = await db.collection("slackAttendanceLogs")
+      .find(query)
+      .sort({ timestamp: -1 })
+      .toArray();
+
+    // Join with team members
+    const teamMembers = await db.collection("teamMembers").find({}).toArray();
+    const memberMap = new Map(teamMembers.map(m => [m.id, m]));
+
+    return logs.map(log => {
+      const member = memberMap.get(log.teamMemberId);
+      return {
+        ...toSchema<SlackAttendanceLog>(log),
+        memberName: member?.name,
+        memberEmail: member?.email,
+      };
+    });
+  }
+
+  async getSlackAttendanceLogByMessageTs(slackMessageTs: string): Promise<SlackAttendanceLog | undefined> {
+    const db = await getDb();
+    const log = await db.collection("slackAttendanceLogs").findOne({ slackMessageTs });
+    return log ? toSchema<SlackAttendanceLog>(log) : undefined;
+  }
+
+  async createSlackAttendanceLog(log: InsertSlackAttendanceLog): Promise<SlackAttendanceLog> {
+    const db = await getDb();
+    const newLog = {
+      id: nanoid(),
+      ...log,
+      timestamp: new Date(log.timestamp),
+      createdAt: new Date(),
+    };
+    await db.collection("slackAttendanceLogs").insertOne(toMongo(newLog));
+    return toSchema<SlackAttendanceLog>(newLog);
+  }
+
+  // Get team member by Slack user ID
+  async getTeamMemberBySlackUserId(slackUserId: string): Promise<TeamMember | undefined> {
+    const db = await getDb();
+    const member = await db.collection("teamMembers").findOne({ slackUserId });
+    return member ? toSchema<TeamMember>(member) : undefined;
   }
 }
 

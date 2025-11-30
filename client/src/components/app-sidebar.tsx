@@ -1,20 +1,23 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   Users,
   FileText,
   Briefcase,
   CreditCard,
-  DollarSign,
   Settings,
-  BookOpen,
-  Globe,
   LogOut,
   ChevronRight,
-  ChevronDown,
   UserPlus,
-  UserCheck,
   Wallet,
+  FileSignature,
+  BarChart3,
+  Send,
+  Building2,
+  Receipt,
+  UsersRound,
+  CalendarCheck,
+  CalendarOff,
 } from "lucide-react";
 import {
   Sidebar,
@@ -25,56 +28,76 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarHeader,
   SidebarFooter,
+  SidebarSeparator,
 } from "@/components/ui/sidebar";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
-const mainMenuItems = [
+// Overview - Main dashboard
+const overviewItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, testId: "link-dashboard" },
-  { title: "Clients", url: "/clients", icon: Users, testId: "link-clients" },
+];
+
+// Client Management - Everything related to clients
+const clientItems = [
+  { title: "All Clients", url: "/clients", icon: Building2, testId: "link-clients" },
+  { title: "Client Onboarding", url: "/client-onboarding", icon: UserPlus, testId: "link-client-onboarding" },
+];
+
+// Finance - Invoices, expenses, vendors
+const financeItems = [
   { title: "Invoices", url: "/invoices", icon: FileText, testId: "link-invoices" },
+  { title: "Expenses", url: "/expenses", icon: Receipt, testId: "link-expenses" },
   { title: "Vendors", url: "/vendors", icon: Briefcase, testId: "link-vendors" },
-  { title: "Expenses", url: "/expenses", icon: CreditCard, testId: "link-expenses" },
 ];
 
-const hrItems = [
-  { title: "Team Members", url: "/team-salaries", icon: Users, testId: "link-team-members" },
+// HR & Payroll - Team members, salaries, attendance, leave
+const hrPayrollItems = [
+  { title: "Team Members", url: "/team-salaries", icon: UsersRound, testId: "link-team-members" },
   { title: "Salary Payments", url: "/team-salaries?tab=salaries", icon: Wallet, testId: "link-salaries" },
-  { title: "Onboard Employee", url: "/employee-onboarding", icon: UserPlus, testId: "link-employee-onboarding" },
+  { title: "Attendance", url: "/attendance", icon: CalendarCheck, testId: "link-attendance" },
+  { title: "Leave Management", url: "/leave-management", icon: CalendarOff, testId: "link-leave-management" },
+  { title: "Employee Onboarding", url: "/employee-onboarding", icon: UserPlus, testId: "link-employee-onboarding" },
 ];
 
-const onboardingItems = [
-  { title: "Client Onboarding", url: "/client-onboarding", icon: UserCheck, testId: "link-client-onboarding" },
-  { title: "Employee Onboarding", url: "/employee-onboarding", icon: UserPlus, testId: "link-employee-onboarding-2" },
+// Marketing - Proposals, contracts, reports
+const marketingItems = [
+  { title: "Proposals", url: "/proposals", icon: Send, testId: "link-proposals" },
+  { title: "Contracts", url: "/contracts", icon: FileSignature, testId: "link-contracts" },
+  { title: "Monthly Reports", url: "/monthly-reports", icon: BarChart3, testId: "link-monthly-reports" },
 ];
 
-const placeholderItems = [
-  { title: "Learning Hub", url: "#", icon: BookOpen, testId: "link-learning-disabled" },
-  { title: "Client Portal", url: "#", icon: Globe, testId: "link-portal-disabled" },
+// System - Settings
+const systemItems = [
+  { title: "Settings", url: "/settings", icon: Settings, testId: "link-settings" },
 ];
 
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
-  const [hrOpen, setHrOpen] = useState(
-    location.includes("/team-salaries") || location.includes("/employee-onboarding")
+
+  // Track search params to re-render on query string changes
+  const [searchParams, setSearchParams] = useState(() =>
+    typeof window !== "undefined" ? window.location.search : ""
   );
-  const [onboardingOpen, setOnboardingOpen] = useState(
-    location.includes("-onboarding")
-  );
+
+  useEffect(() => {
+    // Update search params when location changes
+    setSearchParams(window.location.search);
+
+    // Listen for popstate events (back/forward navigation)
+    const handlePopState = () => {
+      setSearchParams(window.location.search);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [location]);
 
   const getInitials = (name: string) => {
     return name
@@ -85,257 +108,165 @@ export function AppSidebar() {
       .slice(0, 2);
   };
 
+  // Get current URL with query params
+  const currentPath = typeof window !== "undefined" ? window.location.pathname : location;
+  const currentSearch = searchParams;
+
   const isActive = (url: string) => {
-    if (url === "/") return location === url;
-    return location.startsWith(url.split("?")[0]);
+    if (url === "/") return currentPath === url;
+
+    // Check if URL has query params (e.g., /team-salaries?tab=salaries)
+    const [urlPath, urlQuery] = url.split("?");
+
+    // If the menu item has a query param, match both path and query
+    if (urlQuery) {
+      return currentPath === urlPath && currentSearch === `?${urlQuery}`;
+    }
+
+    // For items without query params, match path but ensure no query params in current URL
+    // that would indicate a different tab
+    if (currentPath === urlPath) {
+      // If the current URL has no query params, this base item is active
+      return !currentSearch;
+    }
+
+    // For non-tabbed pages, use startsWith
+    return currentPath.startsWith(urlPath);
   };
+
+  const renderMenuItems = (items: typeof overviewItems) => (
+    <SidebarMenu className="gap-0.5">
+      {items.map((item) => {
+        const active = isActive(item.url);
+        return (
+          <SidebarMenuItem key={item.title}>
+            <SidebarMenuButton
+              asChild
+              isActive={active}
+              className={cn(
+                "group relative h-8 rounded-md transition-all duration-200",
+                active
+                  ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
+                  : "hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
+              )}
+            >
+              <Link href={item.url} data-testid={item.testId}>
+                <item.icon
+                  className={cn(
+                    "h-4 w-4 transition-transform duration-200",
+                    active ? "" : "group-hover:scale-110"
+                  )}
+                />
+                <span className="font-medium text-[13px]">{item.title}</span>
+                {active && (
+                  <ChevronRight className="ml-auto h-3.5 w-3.5 opacity-70" />
+                )}
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        );
+      })}
+    </SidebarMenu>
+  );
 
   return (
     <Sidebar className="border-r-0">
-      <SidebarHeader className="p-5">
+      <SidebarHeader className="p-4">
         <div className="flex items-center gap-3">
           <div className="relative">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center shadow-lg shadow-primary/25">
-              <span className="text-white font-bold text-lg">H</span>
+            <div className="h-9 w-9 rounded-lg overflow-hidden shadow-md flex items-center justify-center bg-white">
+              <img src="/logo.svg" alt="Agency Manager" className="h-7 w-7 object-contain" />
             </div>
-            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-sidebar" />
+            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-sidebar" />
           </div>
           <div className="flex flex-col">
-            <span className="text-base font-bold text-sidebar-foreground tracking-tight">HQ CRM</span>
-            <span className="text-xs text-sidebar-foreground/60">Hyperlinq Technology</span>
+            <span className="text-sm font-bold text-sidebar-foreground tracking-tight">Agency Manager</span>
+            <span className="text-[10px] text-sidebar-foreground/50">Hyperlinq Technology</span>
           </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="px-3 scrollbar-thin">
-        {/* Main Menu */}
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest font-semibold px-3 text-sidebar-foreground/40 mb-1">
-            Main Menu
-          </SidebarGroupLabel>
+      <SidebarContent className="px-3">
+        {/* Overview */}
+        <SidebarGroup className="py-0">
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-1">
-              {mainMenuItems.map((item) => {
-                const active = isActive(item.url);
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton 
-                      asChild 
-                      isActive={active}
-                      className={cn(
-                        "group relative h-10 rounded-lg transition-all duration-200",
-                        active 
-                          ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" 
-                          : "hover:bg-sidebar-accent text-sidebar-foreground/80 hover:text-sidebar-foreground"
-                      )}
-                    >
-                      <Link href={item.url} data-testid={item.testId}>
-                        <item.icon className={cn(
-                          "h-4 w-4 transition-transform duration-200",
-                          active ? "" : "group-hover:scale-110"
-                        )} />
-                        <span className="font-medium">{item.title}</span>
-                        {active && (
-                          <ChevronRight className="ml-auto h-4 w-4 opacity-70" />
-                        )}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
+            {renderMenuItems(overviewItems)}
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* HR & Payroll Section */}
-        <SidebarGroup className="mt-2">
-          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest font-semibold px-3 text-sidebar-foreground/40 mb-1">
+        <SidebarSeparator className="my-1.5" />
+
+        {/* Clients */}
+        <SidebarGroup className="py-0">
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest font-semibold px-2 text-sidebar-foreground/40 mb-0.5">
+            Clients
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            {renderMenuItems(clientItems)}
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Finance */}
+        <SidebarGroup className="py-0 mt-2">
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest font-semibold px-2 text-sidebar-foreground/40 mb-0.5">
+            Finance
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            {renderMenuItems(financeItems)}
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* HR & Payroll */}
+        <SidebarGroup className="py-0 mt-2">
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest font-semibold px-2 text-sidebar-foreground/40 mb-0.5">
             HR & Payroll
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-1">
-              <Collapsible open={hrOpen} onOpenChange={setHrOpen}>
-                <SidebarMenuItem>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton
-                      className={cn(
-                        "group h-10 rounded-lg transition-all duration-200",
-                        (location.includes("/team-salaries") || location.includes("/employee-onboarding"))
-                          ? "bg-sidebar-accent text-sidebar-foreground"
-                          : "hover:bg-sidebar-accent text-sidebar-foreground/80 hover:text-sidebar-foreground"
-                      )}
-                    >
-                      <DollarSign className="h-4 w-4" />
-                      <span className="font-medium">Team & Payroll</span>
-                      <ChevronDown className={cn(
-                        "ml-auto h-4 w-4 transition-transform duration-200",
-                        hrOpen ? "rotate-180" : ""
-                      )} />
-                    </SidebarMenuButton>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub className="ml-4 mt-1 space-y-1 border-l border-sidebar-border pl-4">
-                      {hrItems.map((item) => {
-                        const active = isActive(item.url);
-                        return (
-                          <SidebarMenuSubItem key={item.title}>
-                            <SidebarMenuSubButton
-                              asChild
-                              isActive={active}
-                              className={cn(
-                                "h-9 rounded-md transition-all",
-                                active
-                                  ? "bg-primary/10 text-primary font-medium"
-                                  : "hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
-                              )}
-                            >
-                              <Link href={item.url} data-testid={item.testId}>
-                                <item.icon className="h-3.5 w-3.5" />
-                                <span className="text-sm">{item.title}</span>
-                              </Link>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        );
-                      })}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
-              </Collapsible>
-            </SidebarMenu>
+            {renderMenuItems(hrPayrollItems)}
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Onboarding Section */}
-        <SidebarGroup className="mt-2">
-          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest font-semibold px-3 text-sidebar-foreground/40 mb-1">
-            Quick Actions
+        {/* Marketing */}
+        <SidebarGroup className="py-0 mt-2">
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest font-semibold px-2 text-sidebar-foreground/40 mb-0.5">
+            Marketing
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-1">
-              <Collapsible open={onboardingOpen} onOpenChange={setOnboardingOpen}>
-                <SidebarMenuItem>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton
-                      className={cn(
-                        "group h-10 rounded-lg transition-all duration-200",
-                        location.includes("-onboarding")
-                          ? "bg-sidebar-accent text-sidebar-foreground"
-                          : "hover:bg-sidebar-accent text-sidebar-foreground/80 hover:text-sidebar-foreground"
-                      )}
-                    >
-                      <UserPlus className="h-4 w-4" />
-                      <span className="font-medium">Onboarding</span>
-                      <ChevronDown className={cn(
-                        "ml-auto h-4 w-4 transition-transform duration-200",
-                        onboardingOpen ? "rotate-180" : ""
-                      )} />
-                    </SidebarMenuButton>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub className="ml-4 mt-1 space-y-1 border-l border-sidebar-border pl-4">
-                      {onboardingItems.map((item) => {
-                        const active = isActive(item.url);
-                        return (
-                          <SidebarMenuSubItem key={item.title}>
-                            <SidebarMenuSubButton
-                              asChild
-                              isActive={active}
-                              className={cn(
-                                "h-9 rounded-md transition-all",
-                                active
-                                  ? "bg-primary/10 text-primary font-medium"
-                                  : "hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
-                              )}
-                            >
-                              <Link href={item.url} data-testid={item.testId}>
-                                <item.icon className="h-3.5 w-3.5" />
-                                <span className="text-sm">{item.title}</span>
-                              </Link>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        );
-                      })}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
-              </Collapsible>
-
-              {/* Settings - standalone */}
-              <SidebarMenuItem>
-                <SidebarMenuButton 
-                  asChild 
-                  isActive={isActive("/settings")}
-                  className={cn(
-                    "group relative h-10 rounded-lg transition-all duration-200",
-                    isActive("/settings")
-                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" 
-                      : "hover:bg-sidebar-accent text-sidebar-foreground/80 hover:text-sidebar-foreground"
-                  )}
-                >
-                  <Link href="/settings" data-testid="link-settings">
-                    <Settings className={cn(
-                      "h-4 w-4 transition-transform duration-200",
-                      isActive("/settings") ? "" : "group-hover:scale-110"
-                    )} />
-                    <span className="font-medium">Settings</span>
-                    {isActive("/settings") && (
-                      <ChevronRight className="ml-auto h-4 w-4 opacity-70" />
-                    )}
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
+            {renderMenuItems(marketingItems)}
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Coming Soon */}
-        <SidebarGroup className="mt-6">
-          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest font-semibold px-3 text-sidebar-foreground/40 mb-1">
-            Coming Soon
-          </SidebarGroupLabel>
+        <SidebarSeparator className="my-1.5" />
+
+        {/* System */}
+        <SidebarGroup className="py-0">
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-1">
-              {placeholderItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton 
-                    disabled 
-                    className="h-10 rounded-lg opacity-40 cursor-not-allowed"
-                    data-testid={item.testId}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span className="font-medium">{item.title}</span>
-                    <span className="ml-auto text-[10px] uppercase tracking-wide bg-sidebar-accent px-2 py-0.5 rounded-full">
-                      Soon
-                    </span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            {renderMenuItems(systemItems)}
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4 mt-auto">
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-sidebar-accent/50 backdrop-blur-sm">
-          <Avatar className="h-9 w-9 ring-2 ring-primary/20">
+      <SidebarFooter className="p-3 mt-auto">
+        <div className="flex items-center gap-3 p-2.5 rounded-lg bg-sidebar-accent/50">
+          <Avatar className="h-8 w-8 ring-2 ring-primary/20">
             <AvatarFallback className="bg-gradient-to-br from-primary to-emerald-500 text-white text-xs font-semibold">
               {user ? getInitials(user.name) : "U"}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-sidebar-foreground truncate">
+            <p className="text-sm font-medium text-sidebar-foreground truncate">
               {user?.name || "User"}
             </p>
-            <p className="text-xs text-sidebar-foreground/60 truncate">{user?.email || ""}</p>
+            <p className="text-[11px] text-sidebar-foreground/50 truncate">{user?.email || ""}</p>
           </div>
           <Button
             variant="ghost"
             size="icon"
             onClick={logout}
-            className="h-8 w-8 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent rounded-lg transition-colors"
+            className="h-7 w-7 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent rounded-md transition-colors"
             data-testid="button-logout"
           >
-            <LogOut className="h-4 w-4" />
+            <LogOut className="h-3.5 w-3.5" />
           </Button>
         </div>
       </SidebarFooter>

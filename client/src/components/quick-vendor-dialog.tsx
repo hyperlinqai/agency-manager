@@ -202,3 +202,4 @@ export function QuickVendorDialog({ open, onClose, onVendorCreated }: QuickVendo
   );
 }
 
+

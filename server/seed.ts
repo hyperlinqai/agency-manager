@@ -676,4 +676,42 @@ export async function seedDatabase() {
     console.error("Error seeding database:", error);
     // Don't throw - allow server to continue without seeding
   }
+
+  // Always seed default HR data (job roles, leave types, leave policies)
+  // This runs even if the main database is already seeded
+  await seedDefaultHRData();
+}
+
+/**
+ * Seeds default HR data (job roles, leave types, leave policies)
+ * This function can be called independently and is idempotent (safe to call multiple times)
+ */
+export async function seedDefaultHRData() {
+  try {
+    console.log("Checking and seeding default HR data...");
+
+    // 1. Seed default job roles
+    console.log("  - Seeding job roles...");
+    await storage.seedDefaultJobRoles();
+
+    // 2. Seed default leave types
+    console.log("  - Seeding leave types...");
+    await storage.seedDefaultLeaveTypes();
+
+    // 3. Seed default leave policies (creates policies for all job role + leave type combinations)
+    console.log("  - Seeding leave policies...");
+    const policyResult = await storage.seedDefaultLeavePolicies();
+    if (policyResult.created > 0) {
+      console.log(`  - Created ${policyResult.created} default leave policies (${policyResult.skipped} already existed)`);
+    } else if (policyResult.skipped > 0) {
+      console.log(`  - All ${policyResult.skipped} leave policies already exist`);
+    } else {
+      console.log("  - No leave policies created (check if job roles and leave types exist)");
+    }
+
+    console.log("✅ Default HR data check complete");
+  } catch (error) {
+    console.error("Warning: HR data seeding failed:", error);
+    // Don't throw - allow server to continue
+  }
 }

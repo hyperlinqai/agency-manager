@@ -590,6 +590,13 @@ function numberToWords(num: number): string {
 }
 
 export function InvoicePDF({ invoice, companyProfile, clientAddress, clientEmail, payments, upiQrCode, logoBase64 }: InvoicePDFProps) {
+  // Debug: Log logo status
+  if (logoBase64) {
+    console.log("InvoicePDF: Logo base64 received, length:", logoBase64.length, "starts with:", logoBase64.substring(0, 30));
+  } else {
+    console.log("InvoicePDF: No logo base64 provided, will show placeholder");
+  }
+
   // Simple currency formatter without symbol issues in PDF
   const formatCurrency = (amount: number) => {
     const formatted = new Intl.NumberFormat("en-IN", {
@@ -617,10 +624,6 @@ export function InvoicePDF({ invoice, companyProfile, clientAddress, clientEmail
               {logoBase64 ? (
                 <View style={styles.logoContainer}>
                   <Image style={styles.logoImage} src={logoBase64} />
-                </View>
-              ) : companyProfile?.logoUrl ? (
-                <View style={styles.logoContainer}>
-                  <Image style={styles.logoImage} src={companyProfile.logoUrl} />
                 </View>
               ) : (
                 <View style={styles.logoPlaceholder}>

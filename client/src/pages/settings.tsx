@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -27,24 +27,52 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  Plus, 
-  Pencil, 
-  Building2, 
-  Save, 
-  Briefcase, 
-  Download, 
+import {
+  Plus,
+  Pencil,
+  Building2,
+  Save,
+  Briefcase,
+  Download,
   Trash2,
   Package,
   Tags,
   Settings2,
+  Key,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  XCircle,
+  Sparkles,
+  CalendarOff,
+  Mail,
+  MessageSquare,
+  Hash,
+  Users,
+  RefreshCw,
+  Clock,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { ServiceDialog } from "@/components/service-dialog";
 import { JobRoleDialog } from "@/components/job-role-dialog";
 import { ExpenseCategoryDialog } from "@/components/expense-category-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
-import type { Service, CompanyProfile, JobRole, ExpenseCategory } from "@shared/schema";
+import type { Service, CompanyProfile, JobRole, ExpenseCategory, LeaveType, LeavePolicyWithDetails, SlackSettings } from "@shared/schema";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -68,9 +96,12 @@ export default function SettingsPage() {
     queryKey: ["/api/services"],
   });
 
-  const { data: jobRoles = [], isLoading: isLoadingJobRoles } = useQuery<JobRole[]>({
+  const { data: jobRolesData, isLoading: isLoadingJobRoles } = useQuery<JobRole[]>({
     queryKey: ["/api/job-roles"],
   });
+
+  // Ensure jobRoles is always an array
+  const jobRoles = Array.isArray(jobRolesData) ? jobRolesData : [];
 
   const { data: expenseCategories = [], isLoading: isLoadingExpenseCategories } = useQuery<ExpenseCategory[]>({
     queryKey: ["/api/expense-categories"],
@@ -219,18 +250,30 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="services" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-flex">
+        <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-flex">
           <TabsTrigger value="services" className="gap-2" data-testid="tab-services">
             <Package className="h-4 w-4 hidden sm:inline" />
             Services
           </TabsTrigger>
           <TabsTrigger value="expense-categories" className="gap-2" data-testid="tab-expense-categories">
             <Tags className="h-4 w-4 hidden sm:inline" />
-            Expense Categories
+            Categories
           </TabsTrigger>
           <TabsTrigger value="job-roles" className="gap-2" data-testid="tab-job-roles">
             <Briefcase className="h-4 w-4 hidden sm:inline" />
             Job Roles
+          </TabsTrigger>
+          <TabsTrigger value="leave-policies" className="gap-2" data-testid="tab-leave-policies">
+            <CalendarOff className="h-4 w-4 hidden sm:inline" />
+            Leave Policies
+          </TabsTrigger>
+          <TabsTrigger value="slack" className="gap-2" data-testid="tab-slack">
+            <MessageSquare className="h-4 w-4 hidden sm:inline" />
+            Slack
+          </TabsTrigger>
+          <TabsTrigger value="api-keys" className="gap-2" data-testid="tab-api-keys">
+            <Key className="h-4 w-4 hidden sm:inline" />
+            API Keys
           </TabsTrigger>
           <TabsTrigger value="company" className="gap-2" data-testid="tab-company">
             <Building2 className="h-4 w-4 hidden sm:inline" />
@@ -510,6 +553,21 @@ export default function SettingsPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Leave Policies Tab */}
+        <TabsContent value="leave-policies" className="space-y-4 mt-6">
+          <LeavePoliciesSettings jobRoles={jobRoles} />
+        </TabsContent>
+
+        {/* Slack Integration Tab */}
+        <TabsContent value="slack" className="space-y-4 mt-6">
+          <SlackIntegrationSettings />
+        </TabsContent>
+
+        {/* API Keys Tab */}
+        <TabsContent value="api-keys" className="space-y-4 mt-6">
+          <APIKeysSettings />
         </TabsContent>
 
         {/* Company Tab */}
@@ -1071,5 +1129,1511 @@ function CompanySettingsForm() {
         </div>
       </form>
     </Form>
+  );
+}
+
+// Leave Policies Settings Component
+function LeavePoliciesSettings({ jobRoles }: { jobRoles: JobRole[] }) {
+  const { toast } = useToast();
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [editingPolicy, setEditingPolicy] = useState<LeavePolicyWithDetails | null>(null);
+  const [deletingPolicy, setDeletingPolicy] = useState<LeavePolicyWithDetails | null>(null);
+  const [formData, setFormData] = useState({
+    jobRoleId: "",
+    leaveTypeId: "",
+    annualQuota: 12,
+    carryForwardLimit: 0,
+    isActive: true,
+  });
+
+  const { data: leaveTypesData, isLoading: loadingTypes } = useQuery<LeaveType[]>({
+    queryKey: ["/api/leave-types"],
+  });
+
+  const { data: leavePoliciesData, isLoading: loadingPolicies } = useQuery<LeavePolicyWithDetails[]>({
+    queryKey: ["/api/leave-policies"],
+  });
+
+  // Ensure arrays are always valid
+  const leaveTypes = Array.isArray(leaveTypesData) ? leaveTypesData : [];
+  const leavePolicies = Array.isArray(leavePoliciesData) ? leavePoliciesData : [];
+
+  const createMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      return apiRequest("POST", "/api/leave-policies", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leave-policies"] });
+      toast({ title: "Success", description: "Leave policy created successfully" });
+      setShowAddDialog(false);
+      resetForm();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<typeof formData> }) => {
+      return apiRequest("PUT", `/api/leave-policies/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leave-policies"] });
+      toast({ title: "Success", description: "Leave policy updated successfully" });
+      setShowAddDialog(false);
+      setEditingPolicy(null);
+      resetForm();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/leave-policies/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leave-policies"] });
+      toast({ title: "Success", description: "Leave policy deleted successfully" });
+      setDeletingPolicy(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const seedTypesMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/leave-types/seed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leave-types"] });
+      toast({ title: "Success", description: "Default leave types created" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const seedPoliciesMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/leave-policies/seed");
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leave-policies"] });
+      toast({
+        title: "Success",
+        description: `Created ${data.created} policies${data.skipped > 0 ? `, ${data.skipped} already existed` : ""}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const resetForm = () => {
+    setFormData({
+      jobRoleId: "",
+      leaveTypeId: "",
+      annualQuota: 12,
+      carryForwardLimit: 0,
+      isActive: true,
+    });
+  };
+
+  const handleEdit = (policy: LeavePolicyWithDetails) => {
+    setEditingPolicy(policy);
+    setFormData({
+      jobRoleId: policy.jobRoleId,
+      leaveTypeId: policy.leaveTypeId,
+      annualQuota: policy.annualQuota,
+      carryForwardLimit: policy.carryForwardLimit,
+      isActive: policy.isActive,
+    });
+    setShowAddDialog(true);
+  };
+
+  const handleSubmit = () => {
+    if (editingPolicy) {
+      updateMutation.mutate({ id: editingPolicy.id, data: formData });
+    } else {
+      createMutation.mutate(formData);
+    }
+  };
+
+  const isLoading = loadingTypes || loadingPolicies;
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-0 shadow-sm">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">Leave Policies</CardTitle>
+              <CardDescription>
+                Configure annual leave quotas for each job role and leave type
+              </CardDescription>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {leaveTypes.length === 0 && (
+                <Button
+                  variant="outline"
+                  onClick={() => seedTypesMutation.mutate()}
+                  disabled={seedTypesMutation.isPending}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Default Leave Types
+                </Button>
+              )}
+              {leaveTypes.length > 0 && jobRoles.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={() => seedPoliciesMutation.mutate()}
+                  disabled={seedPoliciesMutation.isPending}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {seedPoliciesMutation.isPending ? "Creating..." : "Create Default Policies"}
+                </Button>
+              )}
+              <Button onClick={() => { resetForm(); setEditingPolicy(null); setShowAddDialog(true); }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Policy
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-14 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : leaveTypes.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <CalendarOff className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No leave types configured yet.</p>
+              <p className="text-sm mt-1">Click "Create Default Leave Types" to get started.</p>
+            </div>
+          ) : leavePolicies.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <CalendarOff className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No leave policies configured yet.</p>
+              {jobRoles.length > 0 ? (
+                <p className="text-sm mt-1">Click "Create Default Policies" to auto-generate policies for all job roles.</p>
+              ) : (
+                <p className="text-sm mt-1">First create Job Roles, then add policies to define leave quotas.</p>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto -mx-6">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="pl-6 text-xs uppercase tracking-wider">Job Role</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider">Leave Type</TableHead>
+                    <TableHead className="text-right text-xs uppercase tracking-wider">Annual Quota</TableHead>
+                    <TableHead className="text-right text-xs uppercase tracking-wider">Carry Forward Limit</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider">Status</TableHead>
+                    <TableHead className="pr-6 text-right text-xs uppercase tracking-wider">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {leavePolicies.map((policy) => (
+                    <TableRow key={policy.id} className="hover:bg-muted/30">
+                      <TableCell className="pl-6 font-medium">{policy.jobRoleTitle || "Unknown"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{policy.leaveTypeCode}</Badge>
+                        <span className="ml-2 text-muted-foreground">{policy.leaveTypeName}</span>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">{policy.annualQuota} days</TableCell>
+                      <TableCell className="text-right">{policy.carryForwardLimit} days</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={policy.isActive
+                            ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-400"
+                            : "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-950/50 dark:text-gray-400"}
+                        >
+                          {policy.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="pr-6 text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => handleEdit(policy)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setDeletingPolicy(policy)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Leave Types Reference Card */}
+      <Card className="border-0 shadow-sm bg-muted/30">
+        <CardContent className="pt-6">
+          <h4 className="text-sm font-medium mb-3">Available Leave Types</h4>
+          {leaveTypes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No leave types available. Create default types first.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {leaveTypes.map((type) => (
+                <Badge key={type.id} variant="secondary">
+                  {type.code} - {type.name}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={showAddDialog} onOpenChange={(open) => { if (!open) { setShowAddDialog(false); setEditingPolicy(null); resetForm(); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingPolicy ? "Edit Leave Policy" : "Add Leave Policy"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium">Job Role</label>
+              <Select
+                value={formData.jobRoleId}
+                onValueChange={(v) => setFormData({ ...formData, jobRoleId: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select job role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {jobRoles.map((role) => (
+                    <SelectItem key={role.id} value={role.id}>
+                      {role.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Leave Type</label>
+              <Select
+                value={formData.leaveTypeId}
+                onValueChange={(v) => setFormData({ ...formData, leaveTypeId: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select leave type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {leaveTypes.map((type) => (
+                    <SelectItem key={type.id} value={type.id}>
+                      {type.name} ({type.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Annual Quota (days)</label>
+              <Input
+                type="number"
+                min="0"
+                value={formData.annualQuota}
+                onChange={(e) => setFormData({ ...formData, annualQuota: parseInt(e.target.value) || 0 })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Carry Forward Limit (days)</label>
+              <Input
+                type="number"
+                min="0"
+                value={formData.carryForwardLimit}
+                onChange={(e) => setFormData({ ...formData, carryForwardLimit: parseInt(e.target.value) || 0 })}
+              />
+              <p className="text-xs text-muted-foreground mt-1">Maximum days that can be carried to next year</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowAddDialog(false); setEditingPolicy(null); resetForm(); }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={!formData.jobRoleId || !formData.leaveTypeId || createMutation.isPending || updateMutation.isPending}
+            >
+              {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <DeleteConfirmDialog
+        open={!!deletingPolicy}
+        onOpenChange={(open) => !open && setDeletingPolicy(null)}
+        onConfirm={() => deletingPolicy && deleteMutation.mutate(deletingPolicy.id)}
+        title="Delete Leave Policy"
+        description={`Are you sure you want to delete the leave policy for ${deletingPolicy?.jobRoleTitle} - ${deletingPolicy?.leaveTypeName}?`}
+        isLoading={deleteMutation.isPending}
+      />
+    </div>
+  );
+}
+
+interface ApiKeysData {
+  openaiApiKey: string;
+  geminiApiKey: string;
+  resendApiKey: string;
+  senderEmail: string;
+  senderName: string;
+  hasOpenaiKey: boolean;
+  hasGeminiKey: boolean;
+  hasResendKey: boolean;
+}
+
+function APIKeysSettings() {
+  const { toast } = useToast();
+  const [showOpenAIKey, setShowOpenAIKey] = useState(false);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [showResendKey, setShowResendKey] = useState(false);
+  const [openaiKey, setOpenaiKey] = useState("");
+  const [geminiKey, setGeminiKey] = useState("");
+  const [resendKey, setResendKey] = useState("");
+  const [testingOpenAI, setTestingOpenAI] = useState(false);
+  const [testingGemini, setTestingGemini] = useState(false);
+  const [testingResend, setTestingResend] = useState(false);
+  const [openaiConnected, setOpenaiConnected] = useState(false);
+  const [geminiConnected, setGeminiConnected] = useState(false);
+  const [resendConnected, setResendConnected] = useState(false);
+
+  // Track if user wants to add/change a key (show input field)
+  const [isAddingOpenAI, setIsAddingOpenAI] = useState(false);
+  const [isAddingGemini, setIsAddingGemini] = useState(false);
+  const [isAddingResend, setIsAddingResend] = useState(false);
+
+  // Sender email configuration
+  const [senderEmail, setSenderEmail] = useState("");
+  const [senderName, setSenderName] = useState("");
+  const [savingSenderConfig, setSavingSenderConfig] = useState(false);
+
+  // Fetch API keys from database
+  const { data: apiKeysData, isLoading } = useQuery<ApiKeysData>({
+    queryKey: ["/api/settings/api-keys"],
+  });
+
+  // Update local state when data is fetched
+  useEffect(() => {
+    if (apiKeysData) {
+      // Only set the key value if we're NOT in adding mode
+      // This prevents overwriting user's input when refetching
+      if (!isAddingOpenAI) {
+        setOpenaiKey(apiKeysData.hasOpenaiKey ? apiKeysData.openaiApiKey : "");
+      }
+      if (!isAddingGemini) {
+        setGeminiKey(apiKeysData.hasGeminiKey ? apiKeysData.geminiApiKey : "");
+      }
+      if (!isAddingResend) {
+        setResendKey(apiKeysData.hasResendKey ? apiKeysData.resendApiKey : "");
+      }
+      // Mark as connected if key exists in database
+      setOpenaiConnected(apiKeysData.hasOpenaiKey);
+      setGeminiConnected(apiKeysData.hasGeminiKey);
+      setResendConnected(apiKeysData.hasResendKey);
+      // Set sender email configuration
+      setSenderEmail(apiKeysData.senderEmail || "");
+      setSenderName(apiKeysData.senderName || "");
+    }
+  }, [apiKeysData, isAddingOpenAI, isAddingGemini, isAddingResend]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: { openaiApiKey?: string; geminiApiKey?: string; resendApiKey?: string }) => {
+      return apiRequest("PUT", "/api/settings/api-keys", data);
+    },
+    onSuccess: (response: ApiKeysData) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/api-keys"] });
+      // Update connected status
+      if (response.hasOpenaiKey) {
+        setOpenaiConnected(true);
+        setIsAddingOpenAI(false);
+      }
+      if (response.hasGeminiKey) {
+        setGeminiConnected(true);
+        setIsAddingGemini(false);
+      }
+      if (response.hasResendKey) {
+        setResendConnected(true);
+        setIsAddingResend(false);
+      }
+      toast({
+        title: "API Keys Saved",
+        description: "Your API keys have been saved securely.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save API keys",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Connect and save OpenAI key
+  const connectOpenAI = async () => {
+    const keyToTest = openaiKey;
+    if (!keyToTest || keyToTest.includes("*")) {
+      toast({
+        title: "Cannot Connect",
+        description: "Please enter a valid OpenAI API key.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setTestingOpenAI(true);
+    try {
+      const response = await fetch("https://api.openai.com/v1/models", {
+        headers: {
+          Authorization: `Bearer ${keyToTest}`,
+        },
+      });
+      if (response.ok) {
+        // Save the key after successful connection
+        saveMutation.mutate({ openaiApiKey: keyToTest });
+        toast({
+          title: "Connected Successfully",
+          description: "OpenAI API key is valid and has been saved.",
+        });
+      } else {
+        const error = await response.json();
+        toast({
+          title: "Invalid API Key",
+          description: error.error?.message || "Failed to connect to OpenAI",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Connection Error",
+        description: "Could not connect to OpenAI API",
+        variant: "destructive",
+      });
+    } finally {
+      setTestingOpenAI(false);
+    }
+  };
+
+  // Connect and save Gemini key
+  const connectGemini = async () => {
+    const keyToTest = geminiKey;
+    if (!keyToTest || keyToTest.includes("*")) {
+      toast({
+        title: "Cannot Connect",
+        description: "Please enter a valid Google Gemini API key.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setTestingGemini(true);
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1/models?key=${keyToTest}`
+      );
+      if (response.ok) {
+        // Save the key after successful connection
+        saveMutation.mutate({ geminiApiKey: keyToTest });
+        toast({
+          title: "Connected Successfully",
+          description: "Google Gemini API key is valid and has been saved.",
+        });
+      } else {
+        const error = await response.json();
+        toast({
+          title: "Invalid API Key",
+          description: error.error?.message || "Failed to connect to Gemini",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Connection Error",
+        description: "Could not connect to Google Gemini API",
+        variant: "destructive",
+      });
+    } finally {
+      setTestingGemini(false);
+    }
+  };
+
+  // Connect and save Resend key
+  const connectResend = async () => {
+    const keyToTest = resendKey;
+    if (!keyToTest || keyToTest.includes("*")) {
+      toast({
+        title: "Cannot Connect",
+        description: "Please enter a valid Resend API key.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setTestingResend(true);
+    try {
+      // Test the Resend API key by configuring it
+      const response = await apiRequest("POST", "/api/email/configure", { apiKey: keyToTest });
+      if (response.success) {
+        // Save the key after successful configuration
+        saveMutation.mutate({ resendApiKey: keyToTest });
+        toast({
+          title: "Connected Successfully",
+          description: "Resend API key is valid and has been saved.",
+        });
+      } else {
+        toast({
+          title: "Invalid API Key",
+          description: "Failed to configure Resend API",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Connection Error",
+        description: error.message || "Could not connect to Resend API",
+        variant: "destructive",
+      });
+    } finally {
+      setTestingResend(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <Skeleton className="h-6 w-40" />
+            <Skeleton className="h-4 w-80" />
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <Skeleton className="h-32 w-full" />
+            <Skeleton className="h-32 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-0 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            AI Integration
+          </CardTitle>
+          <CardDescription>
+            Configure API keys for AI-powered features like proposal and contract generation.
+            Keys are stored securely in the database.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* OpenAI Configuration */}
+          <div className="space-y-4 p-4 rounded-lg border bg-card">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center">
+                  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-semibold">OpenAI</h3>
+                  <p className="text-sm text-muted-foreground">GPT-4 powered generation</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {openaiConnected ? (
+                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-400">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Connected
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-950/50 dark:text-gray-400">
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Not connected
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">API Key</label>
+
+              {/* Show masked key when connected and not in edit mode */}
+              {openaiConnected && !isAddingOpenAI ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 px-3 py-2 bg-muted rounded-md font-mono text-sm text-muted-foreground h-9 flex items-center">
+                    {openaiKey}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setIsAddingOpenAI(true);
+                      setOpenaiKey("");
+                    }}
+                  >
+                    Change Key
+                  </Button>
+                </div>
+              ) : (
+                /* Show input field when not connected or in edit mode */
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type={showOpenAIKey ? "text" : "password"}
+                      value={openaiKey}
+                      onChange={(e) => setOpenaiKey(e.target.value)}
+                      placeholder="sk-..."
+                      className="pr-10 font-mono text-sm"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                      onClick={() => setShowOpenAIKey(!showOpenAIKey)}
+                    >
+                      {showOpenAIKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  {isAddingOpenAI && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setIsAddingOpenAI(false);
+                        setOpenaiKey(apiKeysData?.openaiApiKey || "");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={connectOpenAI}
+                    disabled={testingOpenAI || !openaiKey || openaiKey.includes("*")}
+                  >
+                    {testingOpenAI ? "Connecting..." : "Connect"}
+                  </Button>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Get your API key from{" "}
+                <a
+                  href="https://platform.openai.com/api-keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  platform.openai.com
+                </a>
+              </p>
+            </div>
+          </div>
+
+          {/* Google Gemini Configuration */}
+          <div className="space-y-4 p-4 rounded-lg border bg-card">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 flex items-center justify-center">
+                  <svg className="h-7 w-7" viewBox="0 0 28 28" fill="none">
+                    <defs>
+                      <linearGradient id="gemini-gradient" x1="0%" y1="100%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#1a73e8" />
+                        <stop offset="100%" stopColor="#a855f7" />
+                      </linearGradient>
+                    </defs>
+                    <path d="M14 0C14 7.732 7.732 14 0 14C7.732 14 14 20.268 14 28C14 20.268 20.268 14 28 14C20.268 14 14 7.732 14 0Z" fill="url(#gemini-gradient)" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-semibold">Google Gemini</h3>
+                  <p className="text-sm text-muted-foreground">Gemini Pro powered generation</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {geminiConnected ? (
+                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-400">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Connected
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-950/50 dark:text-gray-400">
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Not connected
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">API Key</label>
+
+              {/* Show masked key when connected and not in edit mode */}
+              {geminiConnected && !isAddingGemini ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 px-3 py-2 bg-muted rounded-md font-mono text-sm text-muted-foreground h-9 flex items-center">
+                    {geminiKey}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setIsAddingGemini(true);
+                      setGeminiKey("");
+                    }}
+                  >
+                    Change Key
+                  </Button>
+                </div>
+              ) : (
+                /* Show input field when not connected or in edit mode */
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type={showGeminiKey ? "text" : "password"}
+                      value={geminiKey}
+                      onChange={(e) => setGeminiKey(e.target.value)}
+                      placeholder="AIza..."
+                      className="pr-10 font-mono text-sm"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                      onClick={() => setShowGeminiKey(!showGeminiKey)}
+                    >
+                      {showGeminiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  {isAddingGemini && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setIsAddingGemini(false);
+                        setGeminiKey(apiKeysData?.geminiApiKey || "");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={connectGemini}
+                    disabled={testingGemini || !geminiKey || geminiKey.includes("*")}
+                  >
+                    {testingGemini ? "Connecting..." : "Connect"}
+                  </Button>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Get your API key from{" "}
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  aistudio.google.com
+                </a>
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Email Integration Card */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Mail className="h-5 w-5 text-primary" />
+            Email Integration
+          </CardTitle>
+          <CardDescription>
+            Configure Resend API for sending proposals, invoices, and contracts via email.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Resend Configuration */}
+          <div className="space-y-4 p-4 rounded-lg border bg-card">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-violet-100 dark:bg-violet-950 flex items-center justify-center">
+                  <Mail className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Resend</h3>
+                  <p className="text-sm text-muted-foreground">Email delivery service</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {resendConnected ? (
+                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-400">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Connected
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-950/50 dark:text-gray-400">
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Not connected
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">API Key</label>
+
+              {/* Show masked key when connected and not in edit mode */}
+              {resendConnected && !isAddingResend ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 px-3 py-2 bg-muted rounded-md font-mono text-sm text-muted-foreground h-9 flex items-center">
+                    {resendKey}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setIsAddingResend(true);
+                      setResendKey("");
+                    }}
+                  >
+                    Change Key
+                  </Button>
+                </div>
+              ) : (
+                /* Show input field when not connected or in edit mode */
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type={showResendKey ? "text" : "password"}
+                      value={resendKey}
+                      onChange={(e) => setResendKey(e.target.value)}
+                      placeholder="re_..."
+                      className="pr-10 font-mono text-sm"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                      onClick={() => setShowResendKey(!showResendKey)}
+                    >
+                      {showResendKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  {isAddingResend && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setIsAddingResend(false);
+                        setResendKey(apiKeysData?.resendApiKey || "");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={connectResend}
+                    disabled={testingResend || !resendKey || resendKey.includes("*")}
+                  >
+                    {testingResend ? "Connecting..." : "Connect"}
+                  </Button>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Get your API key from{" "}
+                <a
+                  href="https://resend.com/api-keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  resend.com
+                </a>
+              </p>
+            </div>
+
+            {/* Sender Email Configuration */}
+            <div className="border-t pt-4 mt-4 space-y-4">
+              <div>
+                <h4 className="font-medium text-sm">Sender Configuration</h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Configure the "From" address for all outgoing emails. Must be a verified domain in Resend.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Sender Name</label>
+                  <Input
+                    type="text"
+                    value={senderName}
+                    onChange={(e) => setSenderName(e.target.value)}
+                    placeholder="Your Company Name"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Display name shown in recipient's inbox
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Sender Email</label>
+                  <Input
+                    type="email"
+                    value={senderEmail}
+                    onChange={(e) => setSenderEmail(e.target.value)}
+                    placeholder="hello@yourdomain.com"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Must use a verified domain in Resend
+                  </p>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  setSavingSenderConfig(true);
+                  try {
+                    await apiRequest("PUT", "/api/settings/api-keys", {
+                      senderEmail,
+                      senderName,
+                    });
+                    queryClient.invalidateQueries({ queryKey: ["/api/settings/api-keys"] });
+                    toast({
+                      title: "Sender Configuration Saved",
+                      description: "Your email sender settings have been updated.",
+                    });
+                  } catch (error: any) {
+                    toast({
+                      title: "Error",
+                      description: error.message || "Failed to save sender configuration",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setSavingSenderConfig(false);
+                  }
+                }}
+                disabled={savingSenderConfig}
+              >
+                {savingSenderConfig ? "Saving..." : "Save Sender Settings"}
+              </Button>
+
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mt-3">
+                <p className="text-xs text-amber-800 dark:text-amber-200">
+                  <strong>Note:</strong> If left empty, emails will be sent from{" "}
+                  <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">onboarding@resend.dev</code> (Resend's test domain).
+                  For production, verify your domain at{" "}
+                  <a
+                    href="https://resend.com/domains"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-amber-700 dark:text-amber-300 hover:underline"
+                  >
+                    resend.com/domains
+                  </a>
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-0 shadow-sm bg-muted/30">
+        <CardContent className="pt-6">
+          <div className="flex gap-3">
+            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <Key className="h-4 w-4 text-primary" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-medium">Security Note</h4>
+              <p className="text-sm text-muted-foreground">
+                API keys are stored securely in the database and masked for display.
+                When updating, enter the new key to replace the existing one.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// Slack Integration Settings Component
+interface SlackChannel {
+  id: string;
+  name: string;
+}
+
+interface SlackUser {
+  id: string;
+  name: string;
+  real_name: string;
+  profile: {
+    email?: string;
+    display_name?: string;
+  };
+}
+
+function SlackIntegrationSettings() {
+  const { toast } = useToast();
+  const [showBotToken, setShowBotToken] = useState(false);
+  const [showSigningSecret, setShowSigningSecret] = useState(false);
+  const [isConfiguring, setIsConfiguring] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+
+  const [formData, setFormData] = useState({
+    botToken: "",
+    signingSecret: "",
+    checkInChannelId: "",
+    checkInKeywords: ["good morning", "gm", "starting work", "today's tasks", "morning update", "morning todos"],
+    checkOutKeywords: ["signing off", "done for the day", "wrapping up", "eod", "end of day", "logging off", "good night"],
+    isActive: true,
+  });
+
+  // Fetch existing Slack settings
+  const { data: slackSettings, isLoading, refetch } = useQuery<SlackSettings | null>({
+    queryKey: ["/api/slack/settings"],
+  });
+
+  // Fetch Slack channels
+  const { data: channels = [], isLoading: loadingChannels } = useQuery<SlackChannel[]>({
+    queryKey: ["/api/slack/channels"],
+    enabled: !!slackSettings?.botToken,
+  });
+
+  // Update form when settings are fetched
+  useEffect(() => {
+    if (slackSettings && !isConfiguring) {
+      setFormData({
+        botToken: slackSettings.botToken || "",
+        signingSecret: slackSettings.signingSecret || "",
+        checkInChannelId: slackSettings.checkInChannelId || "",
+        checkInKeywords: slackSettings.checkInKeywords || [],
+        checkOutKeywords: slackSettings.checkOutKeywords || [],
+        isActive: slackSettings.isActive ?? true,
+      });
+    }
+  }, [slackSettings, isConfiguring]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      return apiRequest("POST", "/api/slack/settings", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/slack/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/slack/channels"] });
+      toast({
+        title: "Slack Connected",
+        description: "Slack integration has been configured successfully.",
+      });
+      setIsConfiguring(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save Slack settings",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: Partial<typeof formData>) => {
+      return apiRequest("PUT", `/api/slack/settings/${slackSettings?.id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/slack/settings"] });
+      toast({
+        title: "Settings Updated",
+        description: "Slack settings have been updated.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update settings",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("DELETE", "/api/slack/settings");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/slack/settings"] });
+      setFormData({
+        botToken: "",
+        signingSecret: "",
+        checkInChannelId: "",
+        checkInKeywords: ["good morning", "gm", "starting work", "today's tasks", "morning update", "morning todos"],
+        checkOutKeywords: ["signing off", "done for the day", "wrapping up", "eod", "end of day", "logging off", "good night"],
+        isActive: true,
+      });
+      toast({
+        title: "Disconnected",
+        description: "Slack integration has been removed.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const testConnection = async () => {
+    if (!formData.botToken) {
+      toast({
+        title: "Missing Token",
+        description: "Please enter a bot token first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setTestingConnection(true);
+    try {
+      const result = await apiRequest("POST", "/api/slack/test-connection", {
+        botToken: formData.botToken,
+      });
+      if (result.ok) {
+        toast({
+          title: "Connection Successful",
+          description: `Connected to workspace: ${result.teamName}`,
+        });
+      } else {
+        toast({
+          title: "Connection Failed",
+          description: result.error || "Could not connect to Slack",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Connection Error",
+        description: error.message || "Failed to test connection",
+        variant: "destructive",
+      });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  const handleSave = () => {
+    if (!formData.botToken || !formData.signingSecret) {
+      toast({
+        title: "Missing Required Fields",
+        description: "Bot token and signing secret are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    saveMutation.mutate(formData);
+  };
+
+  const handleKeywordChange = (type: "checkIn" | "checkOut", value: string) => {
+    const keywords = value.split(",").map(k => k.trim()).filter(k => k);
+    if (type === "checkIn") {
+      setFormData({ ...formData, checkInKeywords: keywords });
+    } else {
+      setFormData({ ...formData, checkOutKeywords: keywords });
+    }
+  };
+
+  const isConnected = !!slackSettings?.teamId;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-96" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-32 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-0 shadow-sm">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-[#4A154B] flex items-center justify-center">
+                <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.124 2.521a2.528 2.528 0 0 1 2.52-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.52V8.834zm-1.271 0a2.528 2.528 0 0 1-2.521 2.521 2.528 2.528 0 0 1-2.521-2.521V2.522A2.528 2.528 0 0 1 15.165 0a2.528 2.528 0 0 1 2.521 2.522v6.312zm-2.521 10.124a2.528 2.528 0 0 1 2.521 2.52A2.528 2.528 0 0 1 15.165 24a2.528 2.528 0 0 1-2.521-2.522v-2.52h2.521zm0-1.271a2.528 2.528 0 0 1-2.521-2.521 2.528 2.528 0 0 1 2.521-2.521h6.313A2.528 2.528 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.521h-6.313z"/>
+                </svg>
+              </div>
+              <div>
+                <CardTitle className="text-lg">Slack Integration</CardTitle>
+                <CardDescription>
+                  Track attendance through Slack messages
+                </CardDescription>
+              </div>
+            </div>
+            {isConnected && (
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-400">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Connected to {slackSettings?.teamName}
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {!isConnected || isConfiguring ? (
+            <>
+              <div className="p-4 bg-muted/50 rounded-lg border">
+                <h4 className="font-medium mb-2">Setup Instructions</h4>
+                <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+                  <li>Go to <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">api.slack.com/apps</a> and create a new app</li>
+                  <li>Enable "Event Subscriptions" and set the Request URL to: <code className="bg-muted px-1 py-0.5 rounded text-xs">{window.location.origin}/api/slack/webhook</code></li>
+                  <li>Subscribe to these bot events: <code className="bg-muted px-1 py-0.5 rounded text-xs">message.channels</code>, <code className="bg-muted px-1 py-0.5 rounded text-xs">message.groups</code></li>
+                  <li>In "OAuth & Permissions", add scopes: <code className="bg-muted px-1 py-0.5 rounded text-xs">channels:history</code>, <code className="bg-muted px-1 py-0.5 rounded text-xs">chat:write</code>, <code className="bg-muted px-1 py-0.5 rounded text-xs">reactions:write</code>, <code className="bg-muted px-1 py-0.5 rounded text-xs">users:read</code>, <code className="bg-muted px-1 py-0.5 rounded text-xs">channels:read</code></li>
+                  <li>Install the app to your workspace and copy the Bot Token and Signing Secret</li>
+                </ol>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Bot Token</label>
+                  <div className="relative">
+                    <Input
+                      type={showBotToken ? "text" : "password"}
+                      value={formData.botToken}
+                      onChange={(e) => setFormData({ ...formData, botToken: e.target.value })}
+                      placeholder="xoxb-..."
+                      className="pr-10 font-mono text-sm"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                      onClick={() => setShowBotToken(!showBotToken)}
+                    >
+                      {showBotToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Signing Secret</label>
+                  <div className="relative">
+                    <Input
+                      type={showSigningSecret ? "text" : "password"}
+                      value={formData.signingSecret}
+                      onChange={(e) => setFormData({ ...formData, signingSecret: e.target.value })}
+                      placeholder="Enter signing secret..."
+                      className="pr-10 font-mono text-sm"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                      onClick={() => setShowSigningSecret(!showSigningSecret)}
+                    >
+                      {showSigningSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={testConnection}
+                    disabled={testingConnection || !formData.botToken}
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${testingConnection ? "animate-spin" : ""}`} />
+                    {testingConnection ? "Testing..." : "Test Connection"}
+                  </Button>
+                  <Button
+                    onClick={handleSave}
+                    disabled={saveMutation.isPending || !formData.botToken || !formData.signingSecret}
+                  >
+                    {saveMutation.isPending ? "Connecting..." : "Connect Slack"}
+                  </Button>
+                  {isConfiguring && (
+                    <Button variant="ghost" onClick={() => setIsConfiguring(false)}>
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <Hash className="h-4 w-4" />
+                    Attendance Channel
+                  </label>
+                  <Select
+                    value={formData.checkInChannelId}
+                    onValueChange={(v) => {
+                      setFormData({ ...formData, checkInChannelId: v });
+                      updateMutation.mutate({ checkInChannelId: v });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={loadingChannels ? "Loading channels..." : "Select channel"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All Channels</SelectItem>
+                      {channels.map((channel) => (
+                        <SelectItem key={channel.id} value={channel.id}>
+                          #{channel.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Monitor specific channel for attendance, or leave empty for all channels
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Integration Status
+                  </label>
+                  <div className="flex items-center justify-between p-3 rounded-lg border">
+                    <div>
+                      <p className="text-sm font-medium">{formData.isActive ? "Active" : "Paused"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formData.isActive ? "Messages are being monitored" : "Monitoring is paused"}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={formData.isActive}
+                      onCheckedChange={(checked) => {
+                        setFormData({ ...formData, isActive: checked });
+                        updateMutation.mutate({ isActive: checked });
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Check-In Keywords</label>
+                  <Input
+                    value={formData.checkInKeywords.join(", ")}
+                    onChange={(e) => handleKeywordChange("checkIn", e.target.value)}
+                    onBlur={() => updateMutation.mutate({ checkInKeywords: formData.checkInKeywords })}
+                    placeholder="good morning, gm, starting work..."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Comma-separated keywords that trigger check-in
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Check-Out Keywords</label>
+                  <Input
+                    value={formData.checkOutKeywords.join(", ")}
+                    onChange={(e) => handleKeywordChange("checkOut", e.target.value)}
+                    onBlur={() => updateMutation.mutate({ checkOutKeywords: formData.checkOutKeywords })}
+                    placeholder="signing off, eod, wrapping up..."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Comma-separated keywords that trigger check-out
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsConfiguring(true)}
+                >
+                  <Key className="h-4 w-4 mr-2" />
+                  Update Credentials
+                </Button>
+                <Button
+                  variant="outline"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => deleteMutation.mutate()}
+                  disabled={deleteMutation.isPending}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {deleteMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-0 shadow-sm bg-muted/30">
+        <CardContent className="pt-6">
+          <div className="flex gap-3">
+            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <Users className="h-4 w-4 text-primary" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-medium">Team Member Mapping</h4>
+              <p className="text-sm text-muted-foreground">
+                To track attendance, link each team member's Slack account in the Team Management section.
+                Go to Team → Edit Member → Connect Slack Account.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

@@ -31,7 +31,7 @@ export default function LoginPage() {
       await login(email, password);
       toast({
         title: "Welcome back!",
-        description: "Successfully logged in to HQ CRM",
+        description: "Successfully logged in to Agency Manager",
       });
     } catch (error) {
       toast({
@@ -66,11 +66,11 @@ export default function LoginPage() {
           <div className="space-y-8">
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center shadow-lg shadow-primary/25">
-                <span className="text-white font-bold text-xl">H</span>
+              <div className="h-12 w-12 rounded-xl overflow-hidden bg-white flex items-center justify-center shadow-lg shadow-primary/25">
+                <img src="/logo.svg" alt="Agency Manager" className="h-10 w-10 object-contain" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-white tracking-tight">HQ CRM</h1>
+                <h1 className="text-2xl font-bold text-white tracking-tight">Agency Manager</h1>
                 <p className="text-sm text-slate-400">by Hyperlinq Technology</p>
               </div>
             </div>
@@ -109,11 +109,11 @@ export default function LoginPage() {
           {/* Mobile logo */}
           <div className="lg:hidden flex justify-center mb-8">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center shadow-lg shadow-primary/25">
-                <span className="text-white font-bold text-lg">H</span>
+              <div className="h-10 w-10 rounded-xl overflow-hidden bg-white flex items-center justify-center shadow-lg shadow-primary/25">
+                <img src="/logo.svg" alt="Agency Manager" className="h-8 w-8 object-contain" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-foreground tracking-tight">HQ CRM</h1>
+                <h1 className="text-xl font-bold text-foreground tracking-tight">Agency Manager</h1>
                 <p className="text-xs text-muted-foreground">by Hyperlinq Technology</p>
               </div>
             </div>
