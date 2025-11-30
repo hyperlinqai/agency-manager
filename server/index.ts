@@ -118,15 +118,15 @@ app.use((req, res, next) => {
     const tryListen = (port: number, maxAttempts = 10): void => {
       const listenOpts: any = {
         port,
-        // bind to localhost for local development to avoid environment socket restrictions
-        host: "127.0.0.1",
+        // bind to 0.0.0.0 in production (Docker), localhost for local dev
+        host: process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1",
       };
       if (process.env.USE_REUSEPORT === "true") {
         listenOpts.reusePort = true;
       }
 
       server.listen(listenOpts, () => {
-        log(`✅ Server running on http://127.0.0.1:${port}`);
+        log(`✅ Server running on http://${listenOpts.host}:${port}`);
       }).on("error", (err: any) => {
         if (err.code === "EADDRINUSE") {
           const nextPort = port + 1;
