@@ -28,6 +28,7 @@ import ProposalCreatePage from "@/pages/proposal-create";
 import ContractsPage from "@/pages/contracts";
 import ContractCreatePage from "@/pages/contract-create";
 import MonthlyReportsPage from "@/pages/monthly-reports";
+import FinancialReportsPage from "@/pages/financial-reports";
 import PublicOnboardingPage from "@/pages/public-onboarding";
 import PublicTeamOnboardingPage from "@/pages/public-team-onboarding";
 
@@ -192,6 +193,13 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <MonthlyReportsPage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/financial-reports">
+        {() => (
+          <ProtectedRoute>
+            <FinancialReportsPage />
           </ProtectedRoute>
         )}
       </Route>

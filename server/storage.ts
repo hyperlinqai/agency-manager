@@ -66,6 +66,8 @@ import {
   type InsertSlackSettings,
   type InsertSlackAttendanceLog,
   type SlackAttendanceLogWithDetails,
+  type FixedAsset,
+  type InsertFixedAsset,
 } from "@shared/schema";
 import { nanoid } from "nanoid";
 
@@ -321,6 +323,13 @@ export interface IStorage {
 
   // Team member by Slack user ID
   getTeamMemberBySlackUserId(slackUserId: string): Promise<TeamMember | undefined>;
+
+  // Fixed Asset methods
+  getFixedAssets(filters?: { status?: string; category?: string; search?: string }): Promise<FixedAsset[]>;
+  getFixedAssetById(id: string): Promise<FixedAsset | undefined>;
+  createFixedAsset(asset: InsertFixedAsset): Promise<FixedAsset>;
+  updateFixedAsset(id: string, asset: Partial<InsertFixedAsset>): Promise<FixedAsset>;
+  deleteFixedAsset(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3726,6 +3735,72 @@ export class DatabaseStorage implements IStorage {
     const db = await getDb();
     const member = await db.collection("teamMembers").findOne({ slackUserId });
     return member ? toSchema<TeamMember>(member) : undefined;
+  }
+
+  // Fixed Asset methods
+  async getFixedAssets(filters?: { status?: string; category?: string; search?: string }): Promise<FixedAsset[]> {
+    const db = await getDb();
+    const query: any = {};
+
+    if (filters?.status) {
+      query.status = filters.status;
+    }
+    if (filters?.category) {
+      query.category = filters.category;
+    }
+    if (filters?.search) {
+      query.$or = [
+        { name: { $regex: filters.search, $options: "i" } },
+        { description: { $regex: filters.search, $options: "i" } },
+        { location: { $regex: filters.search, $options: "i" } },
+      ];
+    }
+
+    const assets = await db.collection("fixedAssets").find(query).sort({ purchaseDate: -1 }).toArray();
+    return assets.map((a) => toSchema<FixedAsset>(a));
+  }
+
+  async getFixedAssetById(id: string): Promise<FixedAsset | undefined> {
+    const db = await getDb();
+    const asset = await db.collection("fixedAssets").findOne({ id });
+    return asset ? toSchema<FixedAsset>(asset) : undefined;
+  }
+
+  async createFixedAsset(asset: InsertFixedAsset): Promise<FixedAsset> {
+    const db = await getDb();
+    const newAsset = {
+      id: nanoid(),
+      ...asset,
+      purchaseDate: new Date(asset.purchaseDate),
+      currentValue: asset.currentValue ?? asset.purchaseValue,
+      disposalDate: asset.disposalDate ? new Date(asset.disposalDate) : null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.collection("fixedAssets").insertOne(toMongo(newAsset));
+    return toSchema<FixedAsset>(newAsset);
+  }
+
+  async updateFixedAsset(id: string, asset: Partial<InsertFixedAsset>): Promise<FixedAsset> {
+    const db = await getDb();
+    const updateData: any = {
+      ...asset,
+      updatedAt: new Date(),
+    };
+    if (asset.purchaseDate) {
+      updateData.purchaseDate = new Date(asset.purchaseDate);
+    }
+    if (asset.disposalDate) {
+      updateData.disposalDate = new Date(asset.disposalDate);
+    }
+    await db.collection("fixedAssets").updateOne({ id }, { $set: updateData });
+    const updated = await db.collection("fixedAssets").findOne({ id });
+    return toSchema<FixedAsset>(updated);
+  }
+
+  async deleteFixedAsset(id: string): Promise<void> {
+    const db = await getDb();
+    await db.collection("fixedAssets").deleteOne({ id });
   }
 }
 

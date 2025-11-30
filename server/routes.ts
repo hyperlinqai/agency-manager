@@ -930,6 +930,1209 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================
+  // FINANCIAL REPORTS ROUTES
+  // ============================================
+
+  // Helper function to get date range based on period
+  const getDateRange = (period: string): { fromDate: Date; toDate: Date } => {
+    const now = new Date();
+    const toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    let fromDate: Date;
+
+    switch (period) {
+      case "this-month":
+        fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case "last-month":
+        fromDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        toDate.setDate(0); // Last day of previous month
+        break;
+      case "this-quarter":
+        const quarterStart = Math.floor(now.getMonth() / 3) * 3;
+        fromDate = new Date(now.getFullYear(), quarterStart, 1);
+        break;
+      case "last-quarter":
+        const lastQuarterStart = Math.floor(now.getMonth() / 3) * 3 - 3;
+        fromDate = new Date(now.getFullYear(), lastQuarterStart, 1);
+        toDate.setMonth(lastQuarterStart + 3);
+        toDate.setDate(0);
+        break;
+      case "this-year":
+        fromDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      case "last-year":
+        fromDate = new Date(now.getFullYear() - 1, 0, 1);
+        toDate.setFullYear(now.getFullYear() - 1, 11, 31);
+        break;
+      case "all-time":
+      default:
+        fromDate = new Date(2000, 0, 1); // Far past date
+        break;
+    }
+
+    return { fromDate, toDate };
+  };
+
+  // Revenue by Client Report
+  app.get("/api/reports/revenue-by-client", authenticateToken, async (req, res) => {
+    try {
+      const { period = "all-time" } = req.query;
+      const { fromDate, toDate } = getDateRange(period as string);
+
+      const clients = await storage.getClients({});
+      const invoices = await storage.getInvoices({});
+
+      const revenueByClient = clients.map((client) => {
+        const clientInvoices = invoices.filter(
+          (inv) =>
+            inv.clientId === client.id &&
+            new Date(inv.issueDate) >= fromDate &&
+            new Date(inv.issueDate) <= toDate
+        );
+
+        const totalInvoiced = clientInvoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
+        const totalPaid = clientInvoices.reduce((sum, inv) => sum + (inv.amountPaid || 0), 0);
+
+        return {
+          clientId: client.id,
+          clientName: client.name,
+          totalInvoiced,
+          totalPaid,
+          totalOutstanding: totalInvoiced - totalPaid,
+          invoiceCount: clientInvoices.length,
+        };
+      });
+
+      // Sort by total invoiced descending and filter out clients with no invoices
+      const sortedRevenue = revenueByClient
+        .filter((c) => c.invoiceCount > 0)
+        .sort((a, b) => b.totalInvoiced - a.totalInvoiced);
+
+      res.json(sortedRevenue);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Invoice Aging Report
+  app.get("/api/reports/invoice-aging", authenticateToken, async (req, res) => {
+    try {
+      const invoices = await storage.getInvoices({});
+      const clients = await storage.getClients({});
+      const today = new Date();
+
+      // Filter unpaid invoices
+      const unpaidInvoices = invoices.filter(
+        (inv) => inv.status !== "PAID" && (inv.balanceDue || 0) > 0
+      );
+
+      // Create aging buckets
+      const buckets = [
+        { range: "Current (Not Due)", min: -Infinity, max: 0, invoices: [] as any[] },
+        { range: "1-30 Days", min: 1, max: 30, invoices: [] as any[] },
+        { range: "31-60 Days", min: 31, max: 60, invoices: [] as any[] },
+        { range: "61-90 Days", min: 61, max: 90, invoices: [] as any[] },
+        { range: "90+ Days", min: 91, max: Infinity, invoices: [] as any[] },
+      ];
+
+      unpaidInvoices.forEach((invoice) => {
+        const dueDate = new Date(invoice.dueDate);
+        const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+        const client = clients.find((c) => c.id === invoice.clientId);
+
+        const invoiceData = {
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          clientName: client?.name || "Unknown",
+          amount: invoice.balanceDue || 0,
+          dueDate: invoice.dueDate,
+          daysOverdue: Math.max(0, daysOverdue),
+        };
+
+        for (const bucket of buckets) {
+          if (daysOverdue >= bucket.min && daysOverdue <= bucket.max) {
+            bucket.invoices.push(invoiceData);
+            break;
+          }
+        }
+      });
+
+      const result = buckets.map((bucket) => ({
+        range: bucket.range,
+        count: bucket.invoices.length,
+        amount: bucket.invoices.reduce((sum, inv) => sum + inv.amount, 0),
+        invoices: bucket.invoices.sort((a, b) => b.daysOverdue - a.daysOverdue),
+      }));
+
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Expenses by Category Report
+  app.get("/api/reports/expenses-by-category", authenticateToken, async (req, res) => {
+    try {
+      const { period = "all-time" } = req.query;
+      const { fromDate, toDate } = getDateRange(period as string);
+
+      const expenses = await storage.getExpenses({});
+      const categories = await storage.getExpenseCategories();
+
+      // Filter expenses by date
+      const filteredExpenses = expenses.filter(
+        (exp) =>
+          new Date(exp.expenseDate) >= fromDate && new Date(exp.expenseDate) <= toDate
+      );
+
+      const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+
+      const expensesByCategory = categories.map((category) => {
+        const categoryExpenses = filteredExpenses.filter((exp) => exp.categoryId === category.id);
+        const totalAmount = categoryExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+
+        return {
+          categoryId: category.id,
+          categoryName: category.name,
+          totalAmount,
+          count: categoryExpenses.length,
+          percentage: totalExpenses > 0 ? (totalAmount / totalExpenses) * 100 : 0,
+        };
+      });
+
+      // Sort by total amount descending and filter out empty categories
+      const sortedExpenses = expensesByCategory
+        .filter((c) => c.count > 0)
+        .sort((a, b) => b.totalAmount - a.totalAmount);
+
+      res.json(sortedExpenses);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Profit by Client Report
+  app.get("/api/reports/profit-by-client", authenticateToken, async (req, res) => {
+    try {
+      const { period = "all-time" } = req.query;
+      const { fromDate, toDate } = getDateRange(period as string);
+
+      const clients = await storage.getClients({});
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+
+      const profitByClient = clients.map((client) => {
+        // Get client revenue (paid invoices)
+        const clientInvoices = invoices.filter(
+          (inv) =>
+            inv.clientId === client.id &&
+            new Date(inv.issueDate) >= fromDate &&
+            new Date(inv.issueDate) <= toDate
+        );
+        const revenue = clientInvoices.reduce((sum, inv) => sum + (inv.amountPaid || 0), 0);
+
+        // Get client-related expenses (if linked via notes or any client field)
+        // For now, we'll distribute expenses proportionally based on revenue
+        const totalRevenue = invoices
+          .filter((inv) => new Date(inv.issueDate) >= fromDate && new Date(inv.issueDate) <= toDate)
+          .reduce((sum, inv) => sum + (inv.amountPaid || 0), 0);
+
+        const totalExpenses = expenses
+          .filter((exp) => new Date(exp.expenseDate) >= fromDate && new Date(exp.expenseDate) <= toDate)
+          .reduce((sum, exp) => sum + (exp.amount || 0), 0);
+
+        const clientExpenses = totalRevenue > 0 ? (revenue / totalRevenue) * totalExpenses : 0;
+        const profit = revenue - clientExpenses;
+        const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
+
+        return {
+          clientId: client.id,
+          clientName: client.name,
+          revenue,
+          expenses: clientExpenses,
+          profit,
+          margin,
+        };
+      });
+
+      // Sort by profit descending and filter out clients with no revenue
+      const sortedProfit = profitByClient
+        .filter((c) => c.revenue > 0)
+        .sort((a, b) => b.profit - a.profit);
+
+      res.json(sortedProfit);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Profit & Loss Statement
+  app.get("/api/reports/profit-loss", authenticateToken, async (req, res) => {
+    try {
+      const { period = "this-month" } = req.query;
+      const { fromDate, toDate } = getDateRange(period as string);
+
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+      const salaries = await storage.getSalaryPayments({});
+
+      // Filter by date range
+      const periodInvoices = invoices.filter(
+        (inv) => new Date(inv.issueDate) >= fromDate && new Date(inv.issueDate) <= toDate
+      );
+      const periodExpenses = expenses.filter(
+        (exp) => new Date(exp.expenseDate) >= fromDate && new Date(exp.expenseDate) <= toDate
+      );
+      const periodSalaries = salaries.filter(
+        (sal) => sal.paymentDate && new Date(sal.paymentDate) >= fromDate && new Date(sal.paymentDate) <= toDate
+      );
+
+      // Calculate revenue
+      const totalInvoiced = periodInvoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
+      const totalCollected = periodInvoices.reduce((sum, inv) => sum + (inv.amountPaid || 0), 0);
+
+      // Calculate expenses
+      const operationalExpenses = periodExpenses
+        .filter((exp) => exp.status === "PAID")
+        .reduce((sum, exp) => sum + (exp.amount || 0), 0);
+
+      const salaryExpenses = periodSalaries
+        .filter((sal) => sal.status === "PAID")
+        .reduce((sum, sal) => sum + (sal.amount || 0), 0);
+
+      const vendorExpenses = periodExpenses
+        .filter((exp) => exp.vendorId && exp.status === "PAID")
+        .reduce((sum, exp) => sum + (exp.amount || 0), 0);
+
+      const otherExpenses = 0; // Can be expanded
+
+      const totalExpenses = operationalExpenses + salaryExpenses;
+      const grossProfit = totalInvoiced - operationalExpenses;
+      const netProfit = totalCollected - totalExpenses;
+      const margin = totalCollected > 0 ? (netProfit / totalCollected) * 100 : 0;
+
+      res.json({
+        period: period as string,
+        revenue: {
+          invoiced: totalInvoiced,
+          collected: totalCollected,
+        },
+        expenses: {
+          operational: operationalExpenses - vendorExpenses - salaryExpenses,
+          salaries: salaryExpenses,
+          vendors: vendorExpenses,
+          other: otherExpenses,
+          total: totalExpenses,
+        },
+        grossProfit,
+        netProfit,
+        margin,
+      });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Balance Sheet
+  app.get("/api/reports/balance-sheet", authenticateToken, async (req, res) => {
+    try {
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+      const salaries = await storage.getSalaryPayments({});
+
+      // Assets
+      const accountsReceivable = invoices
+        .filter((inv) => inv.status !== "PAID")
+        .reduce((sum, inv) => sum + (inv.balanceDue || 0), 0);
+
+      const totalCollected = invoices.reduce((sum, inv) => sum + (inv.amountPaid || 0), 0);
+      const totalExpensesPaid = expenses
+        .filter((exp) => exp.status === "PAID")
+        .reduce((sum, exp) => sum + (exp.amount || 0), 0);
+      const totalSalariesPaid = salaries
+        .filter((sal) => sal.status === "PAID")
+        .reduce((sum, sal) => sum + (sal.amount || 0), 0);
+
+      const cashOnHand = totalCollected - totalExpensesPaid - totalSalariesPaid;
+
+      // Liabilities
+      const accountsPayable = expenses
+        .filter((exp) => exp.status !== "PAID" && exp.status !== "CANCELLED")
+        .reduce((sum, exp) => sum + (exp.amount || 0), 0);
+
+      const pendingSalaries = salaries
+        .filter((sal) => sal.status === "PENDING")
+        .reduce((sum, sal) => sum + (sal.amount || 0), 0);
+
+      const totalCurrentAssets = cashOnHand + accountsReceivable;
+      const totalCurrentLiabilities = accountsPayable + pendingSalaries;
+      const retainedEarnings = totalCurrentAssets - totalCurrentLiabilities;
+
+      res.json({
+        assets: {
+          current: {
+            cash: Math.max(0, cashOnHand),
+            accountsReceivable,
+            total: totalCurrentAssets,
+          },
+          total: totalCurrentAssets,
+        },
+        liabilities: {
+          current: {
+            accountsPayable,
+            pendingSalaries,
+            total: totalCurrentLiabilities,
+          },
+          total: totalCurrentLiabilities,
+        },
+        equity: {
+          retainedEarnings: Math.max(0, retainedEarnings),
+          total: Math.max(0, retainedEarnings),
+        },
+      });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Cash Flow Statement
+  app.get("/api/reports/cash-flow", authenticateToken, async (req, res) => {
+    try {
+      const { period = "this-year" } = req.query;
+
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+      const salaries = await storage.getSalaryPayments({});
+
+      // Get all payments from invoices
+      const payments: { date: Date; amount: number; type: "inflow" | "outflow" }[] = [];
+
+      // Get payments from invoices (simplified - using amountPaid as proxy)
+      invoices.forEach((inv) => {
+        if (inv.amountPaid && inv.amountPaid > 0) {
+          payments.push({
+            date: new Date(inv.issueDate),
+            amount: inv.amountPaid,
+            type: "inflow",
+          });
+        }
+      });
+
+      // Get expense payments
+      expenses
+        .filter((exp) => exp.status === "PAID" && exp.paidDate)
+        .forEach((exp) => {
+          payments.push({
+            date: new Date(exp.paidDate!),
+            amount: exp.amount || 0,
+            type: "outflow",
+          });
+        });
+
+      // Get salary payments
+      salaries
+        .filter((sal) => sal.status === "PAID" && sal.paymentDate)
+        .forEach((sal) => {
+          payments.push({
+            date: new Date(sal.paymentDate!),
+            amount: sal.amount || 0,
+            type: "outflow",
+          });
+        });
+
+      // Group by month
+      const monthlyData: Map<string, { inflows: number; outflows: number }> = new Map();
+
+      payments.forEach((payment) => {
+        const monthKey = `${payment.date.getFullYear()}-${String(payment.date.getMonth() + 1).padStart(2, "0")}`;
+        const existing = monthlyData.get(monthKey) || { inflows: 0, outflows: 0 };
+
+        if (payment.type === "inflow") {
+          existing.inflows += payment.amount;
+        } else {
+          existing.outflows += payment.amount;
+        }
+
+        monthlyData.set(monthKey, existing);
+      });
+
+      // Sort by date and calculate running balance
+      const sortedMonths = Array.from(monthlyData.keys()).sort();
+      let runningBalance = 0;
+
+      const cashFlowData = sortedMonths.slice(-12).map((month) => {
+        const data = monthlyData.get(month)!;
+        const openingBalance = runningBalance;
+        const netCashFlow = data.inflows - data.outflows;
+        runningBalance += netCashFlow;
+
+        return {
+          period: month,
+          inflows: {
+            collections: data.inflows,
+            total: data.inflows,
+          },
+          outflows: {
+            expenses: data.outflows * 0.6, // Approximate split
+            salaries: data.outflows * 0.3,
+            vendors: data.outflows * 0.1,
+            total: data.outflows,
+          },
+          netCashFlow,
+          openingBalance,
+          closingBalance: runningBalance,
+        };
+      });
+
+      res.json(cashFlowData);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // General Ledger Report
+  app.get("/api/reports/general-ledger", authenticateToken, async (req, res) => {
+    try {
+      const { period = "this-month" } = req.query;
+
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+      const salaries = await storage.getSalaryPayments({});
+      const clients = await storage.getClients({});
+      const vendors = await storage.getVendors({});
+
+      // Create client and vendor lookup maps
+      const clientMap = new Map(clients.map((c) => [c.id, c.name]));
+      const vendorMap = new Map(vendors.map((v) => [v.id, v.name]));
+
+      // Build ledger entries
+      const ledgerEntries: Array<{
+        date: string;
+        voucherNo: string;
+        particulars: string;
+        accountHead: string;
+        debit: number;
+        credit: number;
+        balance: number;
+        type: string;
+      }> = [];
+
+      // Add invoice entries (Revenue - Credit)
+      invoices.forEach((inv) => {
+        const clientName = clientMap.get(inv.clientId) || "Unknown Client";
+        ledgerEntries.push({
+          date: new Date(inv.issueDate).toISOString().split("T")[0],
+          voucherNo: inv.invoiceNumber,
+          particulars: `Invoice to ${clientName}`,
+          accountHead: "Sales Revenue",
+          debit: 0,
+          credit: inv.totalAmount || 0,
+          balance: 0,
+          type: "INVOICE",
+        });
+
+        // Add receivable entry (Debit)
+        ledgerEntries.push({
+          date: new Date(inv.issueDate).toISOString().split("T")[0],
+          voucherNo: inv.invoiceNumber,
+          particulars: `Receivable from ${clientName}`,
+          accountHead: "Accounts Receivable",
+          debit: inv.totalAmount || 0,
+          credit: 0,
+          balance: 0,
+          type: "RECEIVABLE",
+        });
+
+        // Add payment received entry if any amount paid
+        if (inv.amountPaid && inv.amountPaid > 0) {
+          ledgerEntries.push({
+            date: new Date(inv.issueDate).toISOString().split("T")[0],
+            voucherNo: `PMT-${inv.invoiceNumber}`,
+            particulars: `Payment received from ${clientName}`,
+            accountHead: "Cash/Bank",
+            debit: inv.amountPaid,
+            credit: 0,
+            balance: 0,
+            type: "PAYMENT_RECEIVED",
+          });
+        }
+      });
+
+      // Add expense entries (Expense - Debit)
+      expenses.forEach((exp, index) => {
+        const vendorName = exp.vendorId ? vendorMap.get(exp.vendorId) || "Unknown Vendor" : "General";
+        ledgerEntries.push({
+          date: new Date(exp.expenseDate).toISOString().split("T")[0],
+          voucherNo: `EXP-${String(index + 1).padStart(4, "0")}`,
+          particulars: `${exp.description} - ${vendorName}`,
+          accountHead: exp.category || "Operating Expenses",
+          debit: exp.amount || 0,
+          credit: 0,
+          balance: 0,
+          type: "EXPENSE",
+        });
+
+        // Add cash/bank credit entry for paid expenses
+        if (exp.status === "PAID") {
+          ledgerEntries.push({
+            date: new Date(exp.paidDate || exp.expenseDate).toISOString().split("T")[0],
+            voucherNo: `EXP-${String(index + 1).padStart(4, "0")}`,
+            particulars: `Payment for ${exp.description}`,
+            accountHead: "Cash/Bank",
+            debit: 0,
+            credit: exp.amount || 0,
+            balance: 0,
+            type: "PAYMENT_MADE",
+          });
+        }
+      });
+
+      // Add salary entries
+      salaries.forEach((sal, index) => {
+        ledgerEntries.push({
+          date: new Date(sal.month + "-01").toISOString().split("T")[0],
+          voucherNo: `SAL-${String(index + 1).padStart(4, "0")}`,
+          particulars: `Salary - ${sal.month}`,
+          accountHead: "Salary Expense",
+          debit: sal.amount || 0,
+          credit: 0,
+          balance: 0,
+          type: "SALARY",
+        });
+
+        if (sal.status === "PAID" && sal.paymentDate) {
+          ledgerEntries.push({
+            date: new Date(sal.paymentDate).toISOString().split("T")[0],
+            voucherNo: `SAL-${String(index + 1).padStart(4, "0")}`,
+            particulars: `Salary Payment - ${sal.month}`,
+            accountHead: "Cash/Bank",
+            debit: 0,
+            credit: sal.amount || 0,
+            balance: 0,
+            type: "SALARY_PAID",
+          });
+        }
+      });
+
+      // Sort by date
+      ledgerEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Calculate running balance
+      let runningBalance = 0;
+      ledgerEntries.forEach((entry) => {
+        runningBalance += entry.debit - entry.credit;
+        entry.balance = runningBalance;
+      });
+
+      res.json(ledgerEntries);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Trial Balance Report
+  app.get("/api/reports/trial-balance", authenticateToken, async (req, res) => {
+    try {
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+      const salaries = await storage.getSalaryPayments({});
+      const fixedAssets = await storage.getFixedAssets({});
+
+      // Define account heads with their normal balances
+      const accounts: Map<string, { debit: number; credit: number; type: string }> = new Map();
+
+      // Helper to add to account
+      const addToAccount = (name: string, debit: number, credit: number, type: string) => {
+        const existing = accounts.get(name) || { debit: 0, credit: 0, type };
+        existing.debit += debit;
+        existing.credit += credit;
+        accounts.set(name, existing);
+      };
+
+      // Assets
+      // Cash/Bank - total payments received
+      const totalCashReceived = invoices.reduce((sum, inv) => sum + (inv.amountPaid || 0), 0);
+      const totalCashPaid = expenses.filter((e) => e.status === "PAID").reduce((sum, e) => sum + (e.amount || 0), 0)
+        + salaries.filter((s) => s.status === "PAID").reduce((sum, s) => sum + (s.amount || 0), 0);
+      addToAccount("Cash & Bank", totalCashReceived, totalCashPaid, "ASSET");
+
+      // Accounts Receivable
+      const totalReceivable = invoices.reduce((sum, inv) => sum + ((inv.totalAmount || 0) - (inv.amountPaid || 0)), 0);
+      if (totalReceivable > 0) {
+        addToAccount("Accounts Receivable", totalReceivable, 0, "ASSET");
+      }
+
+      // Fixed Assets
+      const totalFixedAssets = fixedAssets
+        .filter((a) => a.status === "ACTIVE")
+        .reduce((sum, a) => sum + (a.currentValue || a.purchaseValue || 0), 0);
+      if (totalFixedAssets > 0) {
+        addToAccount("Fixed Assets", totalFixedAssets, 0, "ASSET");
+      }
+
+      // Accumulated Depreciation
+      const totalDepreciation = fixedAssets
+        .filter((a) => a.status === "ACTIVE")
+        .reduce((sum, a) => sum + ((a.purchaseValue || 0) - (a.currentValue || a.purchaseValue || 0)), 0);
+      if (totalDepreciation > 0) {
+        addToAccount("Accumulated Depreciation", 0, totalDepreciation, "CONTRA_ASSET");
+      }
+
+      // Liabilities
+      // Accounts Payable (unpaid expenses)
+      const totalPayable = expenses
+        .filter((e) => e.status !== "PAID" && e.status !== "CANCELLED")
+        .reduce((sum, e) => sum + (e.amount || 0), 0);
+      if (totalPayable > 0) {
+        addToAccount("Accounts Payable", 0, totalPayable, "LIABILITY");
+      }
+
+      // Salary Payable
+      const totalSalaryPayable = salaries
+        .filter((s) => s.status !== "PAID")
+        .reduce((sum, s) => sum + (s.amount || 0), 0);
+      if (totalSalaryPayable > 0) {
+        addToAccount("Salary Payable", 0, totalSalaryPayable, "LIABILITY");
+      }
+
+      // Revenue
+      const totalRevenue = invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
+      addToAccount("Sales Revenue", 0, totalRevenue, "REVENUE");
+
+      // Expenses by category
+      const expenseByCategory = new Map<string, number>();
+      expenses.forEach((exp) => {
+        const cat = exp.category || "Operating Expenses";
+        expenseByCategory.set(cat, (expenseByCategory.get(cat) || 0) + (exp.amount || 0));
+      });
+      expenseByCategory.forEach((amount, category) => {
+        addToAccount(category, amount, 0, "EXPENSE");
+      });
+
+      // Salary Expense
+      const totalSalaryExpense = salaries.reduce((sum, s) => sum + (s.amount || 0), 0);
+      if (totalSalaryExpense > 0) {
+        addToAccount("Salary Expense", totalSalaryExpense, 0, "EXPENSE");
+      }
+
+      // Convert to array and calculate totals
+      const trialBalanceData = Array.from(accounts.entries()).map(([name, data]) => ({
+        accountName: name,
+        accountType: data.type,
+        debit: data.debit > data.credit ? data.debit - data.credit : 0,
+        credit: data.credit > data.debit ? data.credit - data.debit : 0,
+      }));
+
+      // Sort by account type order
+      const typeOrder = ["ASSET", "CONTRA_ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE"];
+      trialBalanceData.sort((a, b) => typeOrder.indexOf(a.accountType) - typeOrder.indexOf(b.accountType));
+
+      const totalDebit = trialBalanceData.reduce((sum, acc) => sum + acc.debit, 0);
+      const totalCredit = trialBalanceData.reduce((sum, acc) => sum + acc.credit, 0);
+
+      res.json({
+        accounts: trialBalanceData,
+        totals: {
+          debit: totalDebit,
+          credit: totalCredit,
+          isBalanced: Math.abs(totalDebit - totalCredit) < 0.01,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Fixed Asset Register Report
+  app.get("/api/reports/fixed-asset-register", authenticateToken, async (req, res) => {
+    try {
+      const assets = await storage.getFixedAssets({});
+
+      // Calculate depreciation for each asset
+      const assetRegister = assets.map((asset) => {
+        const purchaseDate = new Date(asset.purchaseDate);
+        const today = new Date();
+        const yearsOwned = (today.getTime() - purchaseDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+
+        let accumulatedDepreciation = 0;
+        let currentValue = asset.purchaseValue;
+
+        if (asset.depreciationMethod === "STRAIGHT_LINE") {
+          // Straight line: (Cost - Salvage) / Useful Life * Years
+          const annualDepreciation = (asset.purchaseValue - asset.salvageValue) / asset.usefulLifeYears;
+          accumulatedDepreciation = Math.min(
+            annualDepreciation * yearsOwned,
+            asset.purchaseValue - asset.salvageValue
+          );
+          currentValue = Math.max(asset.purchaseValue - accumulatedDepreciation, asset.salvageValue);
+        } else if (asset.depreciationMethod === "WRITTEN_DOWN") {
+          // Written Down Value: Purchase * (1 - rate)^years
+          currentValue = asset.purchaseValue * Math.pow(1 - asset.depreciationRate / 100, yearsOwned);
+          currentValue = Math.max(currentValue, asset.salvageValue);
+          accumulatedDepreciation = asset.purchaseValue - currentValue;
+        }
+
+        return {
+          id: asset.id,
+          name: asset.name,
+          description: asset.description,
+          category: asset.category,
+          purchaseDate: asset.purchaseDate,
+          purchaseValue: asset.purchaseValue,
+          depreciationMethod: asset.depreciationMethod,
+          depreciationRate: asset.depreciationRate,
+          usefulLifeYears: asset.usefulLifeYears,
+          salvageValue: asset.salvageValue,
+          accumulatedDepreciation: Math.round(accumulatedDepreciation * 100) / 100,
+          currentValue: Math.round(currentValue * 100) / 100,
+          yearsOwned: Math.round(yearsOwned * 10) / 10,
+          location: asset.location,
+          status: asset.status,
+          vendor: asset.vendor,
+          invoiceNumber: asset.invoiceNumber,
+        };
+      });
+
+      // Summary by category
+      const categoryWise = assetRegister.reduce((acc, asset) => {
+        if (!acc[asset.category]) {
+          acc[asset.category] = { count: 0, purchaseValue: 0, currentValue: 0, depreciation: 0 };
+        }
+        acc[asset.category].count++;
+        acc[asset.category].purchaseValue += asset.purchaseValue;
+        acc[asset.category].currentValue += asset.currentValue;
+        acc[asset.category].depreciation += asset.accumulatedDepreciation;
+        return acc;
+      }, {} as Record<string, { count: number; purchaseValue: number; currentValue: number; depreciation: number }>);
+
+      res.json({
+        assets: assetRegister,
+        summary: {
+          totalAssets: assetRegister.length,
+          activeAssets: assetRegister.filter((a) => a.status === "ACTIVE").length,
+          totalPurchaseValue: assetRegister.reduce((sum, a) => sum + a.purchaseValue, 0),
+          totalCurrentValue: assetRegister.reduce((sum, a) => sum + a.currentValue, 0),
+          totalDepreciation: assetRegister.reduce((sum, a) => sum + a.accumulatedDepreciation, 0),
+          categoryWise: Object.entries(categoryWise).map(([category, data]) => ({
+            category,
+            ...data,
+          })),
+        },
+      });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // ============================================
+  // GST COMPLIANCE REPORTS
+  // ============================================
+
+  // GSTR-1 Sales Register - Outward Supplies
+  app.get("/api/reports/gst/sales-register", authenticateToken, async (req, res) => {
+    try {
+      const { period = "this-month" } = req.query;
+      const invoices = await storage.getInvoices({});
+      const clients = await storage.getClients({});
+
+      const clientMap = new Map(clients.map((c) => [c.id, c]));
+
+      // Build sales register entries
+      const salesRegister = invoices.map((inv) => {
+        const client = clientMap.get(inv.clientId);
+        const taxableAmount = inv.subtotal || (inv.totalAmount || 0) / 1.18;
+        const gstAmount = (inv.totalAmount || 0) - taxableAmount;
+        const isInterState = false; // Simplified - would check state codes
+
+        return {
+          invoiceNumber: inv.invoiceNumber,
+          invoiceDate: inv.issueDate,
+          clientName: client?.name || "Unknown",
+          gstin: client?.gstNumber || "Unregistered",
+          placeOfSupply: client?.address?.split(",").pop()?.trim() || "Local",
+          invoiceType: client?.gstNumber ? "B2B" : "B2C",
+          taxableValue: Math.round(taxableAmount * 100) / 100,
+          cgst: isInterState ? 0 : Math.round((gstAmount / 2) * 100) / 100,
+          sgst: isInterState ? 0 : Math.round((gstAmount / 2) * 100) / 100,
+          igst: isInterState ? Math.round(gstAmount * 100) / 100 : 0,
+          totalGst: Math.round(gstAmount * 100) / 100,
+          invoiceValue: inv.totalAmount || 0,
+          status: inv.status,
+        };
+      });
+
+      // Summary totals
+      const summary = {
+        totalInvoices: salesRegister.length,
+        b2bInvoices: salesRegister.filter((s) => s.invoiceType === "B2B").length,
+        b2cInvoices: salesRegister.filter((s) => s.invoiceType === "B2C").length,
+        totalTaxableValue: salesRegister.reduce((sum, s) => sum + s.taxableValue, 0),
+        totalCgst: salesRegister.reduce((sum, s) => sum + s.cgst, 0),
+        totalSgst: salesRegister.reduce((sum, s) => sum + s.sgst, 0),
+        totalIgst: salesRegister.reduce((sum, s) => sum + s.igst, 0),
+        totalGst: salesRegister.reduce((sum, s) => sum + s.totalGst, 0),
+        totalInvoiceValue: salesRegister.reduce((sum, s) => sum + s.invoiceValue, 0),
+      };
+
+      res.json({ entries: salesRegister, summary });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // GST Purchase Register - Input Tax Credit
+  app.get("/api/reports/gst/purchase-register", authenticateToken, async (req, res) => {
+    try {
+      const { period = "this-month" } = req.query;
+      const expenses = await storage.getExpenses({});
+      const vendors = await storage.getVendors({});
+
+      const vendorMap = new Map(vendors.map((v) => [v.id, v]));
+
+      // Build purchase register - only GST applicable expenses
+      const purchaseRegister = expenses
+        .filter((exp) => exp.amount && exp.amount > 0)
+        .map((exp, index) => {
+          const vendor = exp.vendorId ? vendorMap.get(exp.vendorId) : null;
+          // Assume 18% GST on expenses (simplified)
+          const totalAmount = exp.amount || 0;
+          const taxableAmount = totalAmount / 1.18;
+          const gstAmount = totalAmount - taxableAmount;
+          const isInterState = false;
+
+          return {
+            voucherNumber: exp.reference || `EXP-${String(index + 1).padStart(4, "0")}`,
+            voucherDate: exp.expenseDate,
+            vendorName: vendor?.name || "General Expense",
+            gstin: vendor?.gstNumber || "Unregistered",
+            description: exp.description,
+            category: exp.category || "General",
+            taxableValue: Math.round(taxableAmount * 100) / 100,
+            cgst: isInterState ? 0 : Math.round((gstAmount / 2) * 100) / 100,
+            sgst: isInterState ? 0 : Math.round((gstAmount / 2) * 100) / 100,
+            igst: isInterState ? Math.round(gstAmount * 100) / 100 : 0,
+            totalGst: Math.round(gstAmount * 100) / 100,
+            totalValue: totalAmount,
+            itcEligible: vendor?.gstNumber ? true : false,
+            status: exp.status,
+          };
+        });
+
+      // Summary
+      const eligibleEntries = purchaseRegister.filter((p) => p.itcEligible);
+      const summary = {
+        totalEntries: purchaseRegister.length,
+        eligibleForItc: eligibleEntries.length,
+        notEligibleForItc: purchaseRegister.length - eligibleEntries.length,
+        totalTaxableValue: purchaseRegister.reduce((sum, p) => sum + p.taxableValue, 0),
+        totalCgst: purchaseRegister.reduce((sum, p) => sum + p.cgst, 0),
+        totalSgst: purchaseRegister.reduce((sum, p) => sum + p.sgst, 0),
+        totalIgst: purchaseRegister.reduce((sum, p) => sum + p.igst, 0),
+        totalGst: purchaseRegister.reduce((sum, p) => sum + p.totalGst, 0),
+        eligibleItc: eligibleEntries.reduce((sum, p) => sum + p.totalGst, 0),
+        totalPurchaseValue: purchaseRegister.reduce((sum, p) => sum + p.totalValue, 0),
+      };
+
+      res.json({ entries: purchaseRegister, summary });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // GSTR-3B Summary - Monthly Return Summary
+  app.get("/api/reports/gst/gstr3b-summary", authenticateToken, async (req, res) => {
+    try {
+      const { period = "this-month" } = req.query;
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+      const vendors = await storage.getVendors({});
+
+      const vendorMap = new Map(vendors.map((v) => [v.id, v]));
+
+      // Calculate Output Tax (from sales)
+      let outputTaxable = 0;
+      let outputCgst = 0;
+      let outputSgst = 0;
+      let outputIgst = 0;
+
+      invoices.forEach((inv) => {
+        const taxableAmount = inv.subtotal || (inv.totalAmount || 0) / 1.18;
+        const gstAmount = (inv.totalAmount || 0) - taxableAmount;
+        outputTaxable += taxableAmount;
+        outputCgst += gstAmount / 2;
+        outputSgst += gstAmount / 2;
+      });
+
+      // Calculate Input Tax Credit (from purchases with GST vendors)
+      let inputTaxable = 0;
+      let inputCgst = 0;
+      let inputSgst = 0;
+      let inputIgst = 0;
+
+      expenses.forEach((exp) => {
+        const vendor = exp.vendorId ? vendorMap.get(exp.vendorId) : null;
+        if (vendor?.gstNumber) {
+          const totalAmount = exp.amount || 0;
+          const taxableAmount = totalAmount / 1.18;
+          const gstAmount = totalAmount - taxableAmount;
+          inputTaxable += taxableAmount;
+          inputCgst += gstAmount / 2;
+          inputSgst += gstAmount / 2;
+        }
+      });
+
+      // Calculate Net Tax Payable
+      const netCgst = Math.max(0, outputCgst - inputCgst);
+      const netSgst = Math.max(0, outputSgst - inputSgst);
+      const netIgst = Math.max(0, outputIgst - inputIgst);
+      const totalNetTax = netCgst + netSgst + netIgst;
+
+      // ITC utilization
+      const cgstCredit = Math.min(outputCgst, inputCgst);
+      const sgstCredit = Math.min(outputSgst, inputSgst);
+      const igstCredit = Math.min(outputIgst, inputIgst);
+
+      res.json({
+        outwardSupplies: {
+          taxableValue: Math.round(outputTaxable * 100) / 100,
+          cgst: Math.round(outputCgst * 100) / 100,
+          sgst: Math.round(outputSgst * 100) / 100,
+          igst: Math.round(outputIgst * 100) / 100,
+          totalTax: Math.round((outputCgst + outputSgst + outputIgst) * 100) / 100,
+        },
+        inputTaxCredit: {
+          taxableValue: Math.round(inputTaxable * 100) / 100,
+          cgst: Math.round(inputCgst * 100) / 100,
+          sgst: Math.round(inputSgst * 100) / 100,
+          igst: Math.round(inputIgst * 100) / 100,
+          totalItc: Math.round((inputCgst + inputSgst + inputIgst) * 100) / 100,
+        },
+        itcUtilization: {
+          cgst: Math.round(cgstCredit * 100) / 100,
+          sgst: Math.round(sgstCredit * 100) / 100,
+          igst: Math.round(igstCredit * 100) / 100,
+          total: Math.round((cgstCredit + sgstCredit + igstCredit) * 100) / 100,
+        },
+        netTaxPayable: {
+          cgst: Math.round(netCgst * 100) / 100,
+          sgst: Math.round(netSgst * 100) / 100,
+          igst: Math.round(netIgst * 100) / 100,
+          total: Math.round(totalNetTax * 100) / 100,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // HSN/SAC Summary Report
+  app.get("/api/reports/gst/hsn-summary", authenticateToken, async (req, res) => {
+    try {
+      const invoices = await storage.getInvoices({});
+
+      // For services, common SAC codes:
+      // 998311 - Management consulting
+      // 998312 - Business consulting
+      // 998313 - Advertising services
+      // 998314 - Market research
+      // 998361 - IT consulting
+      // 998399 - Other professional services
+
+      // Group by assumed SAC code (simplified - in real app would be per line item)
+      const hsnSummary: Record<string, {
+        hsnCode: string;
+        description: string;
+        quantity: number;
+        taxableValue: number;
+        cgst: number;
+        sgst: number;
+        igst: number;
+        totalTax: number;
+      }> = {};
+
+      // Default SAC for marketing agency
+      const defaultSac = "998313";
+      const sacDescriptions: Record<string, string> = {
+        "998311": "Management Consulting Services",
+        "998312": "Business Consulting Services",
+        "998313": "Advertising Services",
+        "998314": "Market Research Services",
+        "998361": "IT Consulting Services",
+        "998399": "Other Professional Services",
+      };
+
+      invoices.forEach((inv) => {
+        const sacCode = defaultSac;
+        const taxableAmount = inv.subtotal || (inv.totalAmount || 0) / 1.18;
+        const gstAmount = (inv.totalAmount || 0) - taxableAmount;
+
+        if (!hsnSummary[sacCode]) {
+          hsnSummary[sacCode] = {
+            hsnCode: sacCode,
+            description: sacDescriptions[sacCode] || "Professional Services",
+            quantity: 0,
+            taxableValue: 0,
+            cgst: 0,
+            sgst: 0,
+            igst: 0,
+            totalTax: 0,
+          };
+        }
+
+        hsnSummary[sacCode].quantity += 1;
+        hsnSummary[sacCode].taxableValue += taxableAmount;
+        hsnSummary[sacCode].cgst += gstAmount / 2;
+        hsnSummary[sacCode].sgst += gstAmount / 2;
+        hsnSummary[sacCode].totalTax += gstAmount;
+      });
+
+      const entries = Object.values(hsnSummary).map((entry) => ({
+        ...entry,
+        taxableValue: Math.round(entry.taxableValue * 100) / 100,
+        cgst: Math.round(entry.cgst * 100) / 100,
+        sgst: Math.round(entry.sgst * 100) / 100,
+        igst: Math.round(entry.igst * 100) / 100,
+        totalTax: Math.round(entry.totalTax * 100) / 100,
+      }));
+
+      const totals = {
+        totalQuantity: entries.reduce((sum, e) => sum + e.quantity, 0),
+        totalTaxableValue: entries.reduce((sum, e) => sum + e.taxableValue, 0),
+        totalCgst: entries.reduce((sum, e) => sum + e.cgst, 0),
+        totalSgst: entries.reduce((sum, e) => sum + e.sgst, 0),
+        totalIgst: entries.reduce((sum, e) => sum + e.igst, 0),
+        totalTax: entries.reduce((sum, e) => sum + e.totalTax, 0),
+      };
+
+      res.json({ entries, totals });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // GST Rate-wise Summary
+  app.get("/api/reports/gst/rate-summary", authenticateToken, async (req, res) => {
+    try {
+      const invoices = await storage.getInvoices({});
+
+      // GST rates in India: 0%, 5%, 12%, 18%, 28%
+      // Most services are at 18%
+      const rateSummary: Record<number, {
+        rate: number;
+        invoiceCount: number;
+        taxableValue: number;
+        cgst: number;
+        sgst: number;
+        igst: number;
+        totalTax: number;
+        invoiceValue: number;
+      }> = {};
+
+      invoices.forEach((inv) => {
+        const rate = 18; // Default GST rate for services
+        const taxableAmount = inv.subtotal || (inv.totalAmount || 0) / (1 + rate / 100);
+        const gstAmount = (inv.totalAmount || 0) - taxableAmount;
+
+        if (!rateSummary[rate]) {
+          rateSummary[rate] = {
+            rate,
+            invoiceCount: 0,
+            taxableValue: 0,
+            cgst: 0,
+            sgst: 0,
+            igst: 0,
+            totalTax: 0,
+            invoiceValue: 0,
+          };
+        }
+
+        rateSummary[rate].invoiceCount += 1;
+        rateSummary[rate].taxableValue += taxableAmount;
+        rateSummary[rate].cgst += gstAmount / 2;
+        rateSummary[rate].sgst += gstAmount / 2;
+        rateSummary[rate].totalTax += gstAmount;
+        rateSummary[rate].invoiceValue += inv.totalAmount || 0;
+      });
+
+      const entries = Object.values(rateSummary)
+        .map((entry) => ({
+          ...entry,
+          taxableValue: Math.round(entry.taxableValue * 100) / 100,
+          cgst: Math.round(entry.cgst * 100) / 100,
+          sgst: Math.round(entry.sgst * 100) / 100,
+          igst: Math.round(entry.igst * 100) / 100,
+          totalTax: Math.round(entry.totalTax * 100) / 100,
+          invoiceValue: Math.round(entry.invoiceValue * 100) / 100,
+        }))
+        .sort((a, b) => a.rate - b.rate);
+
+      res.json(entries);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // ============================================
+  // FIXED ASSET CRUD ROUTES
+  // ============================================
+  app.get("/api/fixed-assets", authenticateToken, async (req, res) => {
+    try {
+      const { status, category, search } = req.query;
+      const assets = await storage.getFixedAssets({
+        status: status as string,
+        category: category as string,
+        search: search as string,
+      });
+      res.json(assets);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/fixed-assets/:id", authenticateToken, async (req, res) => {
+    try {
+      const asset = await storage.getFixedAssetById(req.params.id);
+      if (!asset) {
+        return res.status(404).send("Fixed asset not found");
+      }
+      res.json(asset);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/fixed-assets", authenticateToken, async (req, res) => {
+    try {
+      const { insertFixedAssetSchema } = await import("@shared/schema");
+      const validatedData = insertFixedAssetSchema.parse(req.body);
+      const asset = await storage.createFixedAsset(validatedData);
+      res.json(asset);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.put("/api/fixed-assets/:id", authenticateToken, async (req, res) => {
+    try {
+      const { insertFixedAssetSchema } = await import("@shared/schema");
+      const validatedData = insertFixedAssetSchema.partial().parse(req.body);
+      const asset = await storage.updateFixedAsset(req.params.id, validatedData);
+      res.json(asset);
+    } catch (error: any) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.delete("/api/fixed-assets/:id", authenticateToken, async (req, res) => {
+    try {
+      await storage.deleteFixedAsset(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // ============================================
   // VENDOR ROUTES
   // ============================================
   app.get("/api/vendors", authenticateToken, async (req, res) => {

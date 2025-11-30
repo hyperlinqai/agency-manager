@@ -18,6 +18,7 @@ import {
   UsersRound,
   CalendarCheck,
   CalendarOff,
+  PieChart,
 } from "lucide-react";
 import {
   Sidebar,
@@ -54,6 +55,7 @@ const financeItems = [
   { title: "Invoices", url: "/invoices", icon: FileText, testId: "link-invoices" },
   { title: "Expenses", url: "/expenses", icon: Receipt, testId: "link-expenses" },
   { title: "Vendors", url: "/vendors", icon: Briefcase, testId: "link-vendors" },
+  { title: "Financial Reports", url: "/financial-reports", icon: PieChart, testId: "link-financial-reports" },
 ];
 
 // HR & Payroll - Team members, salaries, attendance, leave

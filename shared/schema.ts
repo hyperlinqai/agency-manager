@@ -45,7 +45,8 @@ export interface Client {
   status: typeof clientStatuses[number];
   notes: string;
   portalUrl: string;
-  
+  gstNumber: string; // GST Identification Number for GST compliance
+
   // Public onboarding
   onboardingToken: string;
   onboardingCompleted: boolean;
@@ -73,6 +74,7 @@ export const insertClientSchema = z.object({
   status: z.enum(clientStatuses).default("ONBOARDING"),
   notes: z.string().optional().default(""),
   portalUrl: z.string().optional().default(""),
+  gstNumber: z.string().optional().default(""), // GST Identification Number (GSTIN)
   onboardingToken: z.string().optional().default(""),
   onboardingCompleted: z.boolean().optional().default(false),
   onboardingCompletedAt: z.string().or(z.date()).optional().nullable(),
@@ -286,6 +288,7 @@ export interface Vendor {
   address: string;
   category: typeof vendorCategories[number];
   status: typeof vendorStatuses[number];
+  gstNumber: string; // GST Identification Number for ITC eligibility
   notes: string;
   createdAt: Date;
   updatedAt: Date;
@@ -300,6 +303,7 @@ export const insertVendorSchema = z.object({
   address: z.string().optional().default(""),
   category: z.enum(vendorCategories).default("OTHER"),
   status: z.enum(vendorStatuses).default("ACTIVE"),
+  gstNumber: z.string().optional().default(""), // GSTIN for ITC eligibility
   notes: z.string().optional().default(""),
 });
 
@@ -1478,3 +1482,52 @@ export interface SlackAttendanceLogWithDetails extends SlackAttendanceLog {
   memberName?: string;
   memberEmail?: string;
 }
+
+// ============================================
+// FIXED ASSETS
+// ============================================
+
+export interface FixedAsset {
+  id: string;
+  name: string;
+  description: string;
+  category: "FURNITURE" | "EQUIPMENT" | "VEHICLE" | "COMPUTER" | "SOFTWARE" | "BUILDING" | "LAND" | "OTHER";
+  purchaseDate: Date;
+  purchaseValue: number;
+  currentValue: number;
+  depreciationMethod: "STRAIGHT_LINE" | "WRITTEN_DOWN" | "NONE";
+  depreciationRate: number; // Annual depreciation rate in percentage
+  usefulLifeYears: number;
+  salvageValue: number;
+  vendor: string | null;
+  invoiceNumber: string | null;
+  location: string;
+  status: "ACTIVE" | "DISPOSED" | "SOLD" | "WRITTEN_OFF";
+  disposalDate: Date | null;
+  disposalValue: number | null;
+  notes: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const insertFixedAssetSchema = z.object({
+  name: z.string().min(1, "Asset name is required"),
+  description: z.string().default(""),
+  category: z.enum(["FURNITURE", "EQUIPMENT", "VEHICLE", "COMPUTER", "SOFTWARE", "BUILDING", "LAND", "OTHER"]),
+  purchaseDate: z.string().or(z.date()),
+  purchaseValue: z.number().min(0),
+  currentValue: z.number().min(0).optional(),
+  depreciationMethod: z.enum(["STRAIGHT_LINE", "WRITTEN_DOWN", "NONE"]).default("STRAIGHT_LINE"),
+  depreciationRate: z.number().min(0).max(100).default(10),
+  usefulLifeYears: z.number().min(0).default(5),
+  salvageValue: z.number().min(0).default(0),
+  vendor: z.string().optional().nullable(),
+  invoiceNumber: z.string().optional().nullable(),
+  location: z.string().default(""),
+  status: z.enum(["ACTIVE", "DISPOSED", "SOLD", "WRITTEN_OFF"]).default("ACTIVE"),
+  disposalDate: z.string().or(z.date()).optional().nullable(),
+  disposalValue: z.number().optional().nullable(),
+  notes: z.string().default(""),
+});
+
+export type InsertFixedAsset = z.infer<typeof insertFixedAssetSchema>;

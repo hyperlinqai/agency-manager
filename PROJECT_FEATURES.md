@@ -23,10 +23,11 @@
 15. [Proposals Management](#proposals-management)
 16. [Contracts Management](#contracts-management)
 17. [Monthly Reports](#monthly-reports)
-18. [AI-Powered Features](#ai-powered-features)
-19. [Settings & Configuration](#settings--configuration)
-20. [Public Features](#public-features)
-21. [Technical Stack](#technical-stack)
+18. [Financial Reports](#financial-reports)
+19. [AI-Powered Features](#ai-powered-features)
+20. [Settings & Configuration](#settings--configuration)
+21. [Public Features](#public-features)
+22. [Technical Stack](#technical-stack)
 
 ---
 
@@ -1023,6 +1024,303 @@ The Slack integration enables automatic attendance tracking by monitoring team m
 
 ---
 
+## Financial Reports
+
+### Overview
+
+Comprehensive financial reporting module providing insights into agency finances with visual charts, detailed data tables, and export functionality.
+
+### Report Types
+
+#### 1. Revenue by Client
+
+- **Purpose**: Track income distribution across clients
+- **Features**:
+  - Bar chart visualization of revenue per client
+  - Total revenue summary card
+  - Average revenue per client
+  - Active clients count
+  - Detailed table with client name and total revenue
+  - Export to CSV
+
+#### 2. Invoice Aging Report
+
+- **Purpose**: Monitor outstanding invoices by age buckets
+- **Features**:
+  - Aging buckets: Current, 1-30 days, 31-60 days, 61-90 days, 90+ days
+  - Pie chart visualization of aging distribution
+  - Summary cards for total outstanding and overdue amounts
+  - Detailed table showing client, invoice number, amount, due date, and age
+  - Color-coded status badges
+  - Export to CSV
+
+#### 3. Expense Tracking
+
+- **Purpose**: Analyze expenses by category
+- **Features**:
+  - Pie chart showing expense distribution by category
+  - Total expenses summary
+  - Category breakdown with amounts and percentages
+  - Expense count per category
+  - Top expense categories analysis
+  - Export to CSV
+
+#### 4. Profit by Client/Project
+
+- **Purpose**: Analyze profitability per client
+- **Features**:
+  - Revenue vs Expenses vs Profit bar chart
+  - Total profit summary
+  - Average profit margin percentage
+  - Detailed breakdown per client:
+    - Revenue collected
+    - Expenses attributed
+    - Net profit
+    - Profit margin percentage
+  - Color-coded profit margins (green for positive, red for negative)
+  - Export to CSV
+
+#### 5. Profit & Loss (P&L) Statement
+
+- **Purpose**: Standard income statement showing financial performance
+- **Structure**:
+  - **Revenue Section**:
+    - Invoice Revenue (collected payments)
+    - Total Revenue
+  - **Expenses Section**:
+    - Operating Expenses
+    - Salary Expenses
+    - Total Expenses
+  - **Summary**:
+    - Gross Profit
+    - Net Profit
+    - Profit Margin percentage
+- **Features**:
+  - Professional P&L format
+  - Clear revenue and expense breakdown
+  - Profit margin indicators
+  - Export to CSV
+
+#### 6. Balance Sheet
+
+- **Purpose**: Snapshot of financial position (assets vs liabilities)
+- **Structure**:
+  - **Assets**:
+    - Cash (payments received)
+    - Accounts Receivable (outstanding invoices)
+    - Total Assets
+  - **Liabilities**:
+    - Accounts Payable (pending expenses)
+    - Accrued Salaries (pending salary payments)
+    - Total Liabilities
+  - **Equity**:
+    - Retained Earnings (Assets - Liabilities)
+    - Total Equity
+- **Features**:
+  - Standard accounting format
+  - Asset-Liability balance verification
+  - Export to CSV
+
+#### 7. Cash Flow Statement
+
+- **Purpose**: Track cash movements in and out of the business
+- **Structure**:
+  - **Operating Activities**:
+    - Cash from Clients (payments received)
+    - Payments to Vendors (paid expenses)
+    - Salary Payments
+    - Net Cash from Operations
+  - **Summary**:
+    - Beginning Cash Balance
+    - Net Change in Cash
+    - Ending Cash Balance
+- **Features**:
+  - Clear cash inflows and outflows
+  - Net cash position tracking
+  - Export to CSV
+
+#### 8. General Ledger
+
+- **Purpose**: Master book of all financial transactions for audits & CA requirements
+- **Features**:
+  - Complete transaction record with debit/credit entries
+  - Voucher numbers and references
+  - Account head categorization
+  - Running balance calculation
+  - Sorted chronologically by date
+  - Includes invoices, payments, expenses, and salaries
+- **Columns**:
+  - Date, Voucher No, Particulars, Account Head
+  - Debit, Credit, Running Balance
+
+#### 9. Trial Balance
+
+- **Purpose**: Pre-check verification before tax filings - CA requirement
+- **Features**:
+  - Summary of all account balances
+  - Automatic balance verification (Debit = Credit)
+  - Balance status indicator (Balanced/Unbalanced)
+  - Account type categorization (Asset, Liability, Revenue, Expense)
+  - Difference calculation for troubleshooting
+- **Account Categories**:
+  - Assets (Cash & Bank, Accounts Receivable, Fixed Assets)
+  - Contra Assets (Accumulated Depreciation)
+  - Liabilities (Accounts Payable, Salary Payable)
+  - Revenue (Sales Revenue)
+  - Expenses (by category + Salary Expense)
+
+#### 10. Fixed Asset Register
+
+- **Purpose**: Track fixed assets with depreciation for Income Tax Act compliance
+- **Features**:
+  - Complete asset inventory with purchase details
+  - Automatic depreciation calculation
+  - Supports Straight Line Method (SLM) and Written Down Value (WDV)
+  - Category-wise asset summary with pie chart
+  - Current book value tracking
+  - Asset status tracking (Active, Disposed, Sold, Written Off)
+- **Asset Categories**:
+  - Furniture, Equipment, Vehicle, Computer
+  - Software, Building, Land, Other
+- **Depreciation Methods**:
+  - **Straight Line**: (Cost - Salvage) / Useful Life
+  - **Written Down Value**: Cost × (1 - Rate)^Years
+- **Columns**:
+  - Asset Name, Category, Purchase Date, Purchase Value
+  - Depreciation Method, Rate/Life, Accumulated Depreciation
+  - Current Value, Status
+
+### Common Features
+
+- **Date Range Filtering**:
+  - This Month
+  - Last Month
+  - This Quarter
+  - This Year
+  - Custom date range picker
+
+- **Data Visualization**:
+  - Interactive charts using Recharts
+  - Bar charts, pie charts
+  - Tooltips with detailed information
+  - Responsive design
+
+- **Export Functionality**:
+  - Export any report to CSV
+  - Formatted data for spreadsheet analysis
+
+- **Summary Cards**:
+  - Key metrics at a glance
+  - Visual indicators for positive/negative values
+
+### API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `/api/reports/revenue-by-client` | Revenue breakdown by client |
+| `/api/reports/invoice-aging` | Invoice aging buckets |
+| `/api/reports/expenses-by-category` | Expense distribution |
+| `/api/reports/profit-by-client` | Profit analysis per client |
+| `/api/reports/profit-loss` | P&L statement data |
+| `/api/reports/balance-sheet` | Balance sheet data |
+| `/api/reports/cash-flow` | Cash flow statement data |
+| `/api/reports/general-ledger` | General ledger entries |
+| `/api/reports/trial-balance` | Trial balance summary |
+| `/api/reports/fixed-asset-register` | Fixed asset register with depreciation |
+
+### Fixed Asset Management
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/fixed-assets` | GET | List all fixed assets |
+| `/api/fixed-assets/:id` | GET | Get single asset |
+| `/api/fixed-assets` | POST | Create new asset |
+| `/api/fixed-assets/:id` | PUT | Update asset |
+| `/api/fixed-assets/:id` | DELETE | Delete asset |
+
+### GST Compliance Reports
+
+Comprehensive GST reporting module for Indian tax compliance.
+
+#### 1. GSTR-3B Summary
+
+- **Purpose**: Monthly GST return summary for filing
+- **Sections**:
+  - **3.1 Outward Supplies**: Taxable value, CGST, SGST, IGST
+  - **4. Input Tax Credit**: ITC from registered vendors
+  - **ITC Utilization**: Credit adjustment
+  - **6.1 Net Tax Payable**: Final tax liability
+- **Features**:
+  - Automatic calculation of Output Tax vs Input Tax Credit
+  - Net payable breakdown by tax type (CGST/SGST/IGST)
+  - Visual summary cards for quick overview
+
+#### 2. Sales Register (GSTR-1)
+
+- **Purpose**: Invoice-wise outward supplies for GSTR-1 filing
+- **Data Points**:
+  - Invoice Number, Date
+  - Client Name, GSTIN
+  - Place of Supply
+  - Invoice Type (B2B/B2C)
+  - Taxable Value, CGST, SGST, IGST
+  - Total Invoice Value
+- **Features**:
+  - B2B vs B2C breakdown
+  - GSTIN tracking for registered clients
+  - Total tax summary
+
+#### 3. Purchase Register (ITC)
+
+- **Purpose**: Track inward supplies for Input Tax Credit
+- **Data Points**:
+  - Voucher Number, Date
+  - Vendor Name, GSTIN
+  - Description, Category
+  - Taxable Value, GST amounts
+  - ITC Eligibility status
+- **Features**:
+  - Automatic ITC eligibility check (based on vendor GSTIN)
+  - Eligible vs Non-eligible ITC breakdown
+  - Total GST paid tracking
+
+#### 4. HSN/SAC Summary
+
+- **Purpose**: Summary by service codes for GSTR-1 Annexure
+- **SAC Codes for Marketing Agency**:
+  - 998313 - Advertising Services
+  - 998311 - Management Consulting
+  - 998312 - Business Consulting
+  - 998314 - Market Research
+  - 998361 - IT Consulting
+  - 998399 - Other Professional Services
+- **Features**:
+  - Quantity (invoice count) per SAC
+  - Taxable value and tax breakdown
+  - Ready for GSTR-1 HSN summary upload
+
+#### 5. Rate-wise Summary
+
+- **Purpose**: Tax breakdown by GST rate slab
+- **GST Rates**: 0%, 5%, 12%, 18%, 28%
+- **Features**:
+  - Invoice count per rate
+  - Taxable value breakdown
+  - CGST/SGST/IGST split
+  - Visual charts (bar and pie)
+
+### GST API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `/api/reports/gst/sales-register` | GSTR-1 sales register |
+| `/api/reports/gst/purchase-register` | Purchase register with ITC |
+| `/api/reports/gst/gstr3b-summary` | GSTR-3B monthly summary |
+| `/api/reports/gst/hsn-summary` | HSN/SAC code summary |
+| `/api/reports/gst/rate-summary` | Rate-wise tax summary |
+
+---
+
 ## AI-Powered Features
 
 ### Overview
@@ -1337,6 +1635,22 @@ The Settings page provides comprehensive configuration options organized into ta
 ✅ Financial dashboard with profit analysis
 ✅ Tax calculations
 ✅ Multiple payment methods support
+✅ Revenue by Client reports
+✅ Invoice Aging reports
+✅ Expense Tracking reports
+✅ Profit by Client analysis
+✅ Profit & Loss (P&L) Statement
+✅ Balance Sheet
+✅ Cash Flow Statement
+✅ General Ledger (for audits & CA)
+✅ Trial Balance (pre-tax filing verification)
+✅ Fixed Asset Register with depreciation
+✅ GST Compliance Reports (GSTR-1, GSTR-3B)
+✅ Sales Register for GST filing
+✅ Purchase Register with ITC tracking
+✅ HSN/SAC Summary
+✅ Rate-wise GST Summary
+✅ Export reports to CSV
 
 ### Client Management
 ✅ Complete client lifecycle management
@@ -1444,12 +1758,38 @@ The application automatically seeds sample data on startup including:
 ---
 
 **Last Updated**: November 2025
-**Version**: 3.0
+**Version**: 3.1
 **Status**: Production Ready
 
 ---
 
 ## Changelog
+
+### Version 3.1 (December 2025)
+- Added Financial Reports module with 15 report types:
+  - Revenue by Client
+  - Invoice Aging Report
+  - Expense Tracking
+  - Profit by Client/Project
+  - Profit & Loss (P&L) Statement
+  - Balance Sheet
+  - Cash Flow Statement
+  - General Ledger (master book for audits)
+  - Trial Balance (CA verification)
+  - Fixed Asset Register (depreciation tracking)
+- Added GST Compliance Reports for Indian tax filing:
+  - GSTR-3B Summary (monthly return)
+  - Sales Register (GSTR-1 outward supplies)
+  - Purchase Register (Input Tax Credit)
+  - HSN/SAC Summary
+  - Rate-wise Summary
+- Added Fixed Asset management with CRUD operations
+- Added automatic depreciation calculation (SLM & WDV methods)
+- Added GST calculation with CGST/SGST/IGST breakdown
+- Added ITC eligibility tracking based on vendor GSTIN
+- Added date range filtering for all financial reports
+- Added CSV export functionality for reports
+- Added interactive charts with Recharts visualization
 
 ### Version 3.0 (November 2025)
 - Added Slack integration for automatic attendance tracking
