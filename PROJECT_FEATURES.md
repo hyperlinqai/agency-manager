@@ -1206,8 +1206,20 @@ Comprehensive financial reporting module providing insights into agency finances
   - Responsive design
 
 - **Export Functionality**:
-  - Export any report to CSV
-  - Formatted data for spreadsheet analysis
+  - **Excel Export**: Professional .xlsx files with:
+    - Company header and report title
+    - Formatted columns with proper widths
+    - Summary section with key totals
+    - Date range information
+    - Landscape orientation for wide reports
+  - **PDF Export**: Print-ready PDF documents with:
+    - Professional header with company name
+    - Report title and date range
+    - Formatted tables with borders
+    - Summary section
+    - Auto-pagination for long reports
+  - Available for all 15 reports (10 financial + 5 GST reports)
+  - One-click download buttons on each report tab
 
 - **Summary Cards**:
   - Key metrics at a glance
@@ -1227,6 +1239,22 @@ Comprehensive financial reporting module providing insights into agency finances
 | `/api/reports/general-ledger` | General ledger entries |
 | `/api/reports/trial-balance` | Trial balance summary |
 | `/api/reports/fixed-asset-register` | Fixed asset register with depreciation |
+
+### Export Endpoints
+
+All reports support Excel and PDF export through dedicated endpoints:
+
+| Endpoint Pattern | Description |
+|-----------------|-------------|
+| `/api/reports/{report}/export/excel` | Download report as Excel file |
+| `/api/reports/{report}/export/pdf` | Download report as PDF file |
+
+**Available Reports for Export:**
+- `revenue-by-client`, `invoice-aging`, `expenses-by-category`
+- `profit-by-client`, `profit-loss`, `balance-sheet`
+- `cash-flow`, `general-ledger`, `trial-balance`, `fixed-asset-register`
+- `gst/sales-register`, `gst/purchase-register`, `gst/gstr3b-summary`
+- `gst/hsn-summary`, `gst/rate-summary`
 
 ### Fixed Asset Management
 

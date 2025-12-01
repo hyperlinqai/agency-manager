@@ -4,6 +4,7 @@ import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -28,6 +29,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ReportComparisonDialog } from "@/components/report-comparison-dialog";
 import {
   Plus,
   Search,
@@ -39,6 +41,8 @@ import {
   Send,
   FileText,
   Download,
+  GitCompare,
+  X,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -51,6 +55,8 @@ export default function MonthlyReportsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [deletingReport, setDeletingReport] = useState<MonthlyReportWithRelations | null>(null);
+  const [selectedReports, setSelectedReports] = useState<Set<string>>(new Set());
+  const [isComparing, setIsComparing] = useState(false);
   
   // Get clientId from URL if provided
   const urlParams = new URLSearchParams(window.location.search);
@@ -113,6 +119,28 @@ export default function MonthlyReportsPage() {
     return matchesSearch;
   });
 
+  const toggleReportSelection = (reportId: string) => {
+    setSelectedReports(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(reportId)) {
+        newSet.delete(reportId);
+      } else {
+        newSet.add(reportId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedReports.size === filteredReports?.length) {
+      setSelectedReports(new Set());
+    } else {
+      setSelectedReports(new Set(filteredReports?.map(r => r.id) || []));
+    }
+  };
+
+  const selectedReportsData = filteredReports?.filter(r => selectedReports.has(r.id)) || [];
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "DRAFT": return "bg-gray-100 text-gray-700";
@@ -133,16 +161,38 @@ export default function MonthlyReportsPage() {
             Upload and manage monthly marketing reports (PDF, DOC, PPT, Excel)
           </p>
         </div>
-        <Button 
-          className="gap-2"
-          onClick={() => {
-            // TODO: Implement upload dialog
-            alert("Report upload coming soon! For now, you can upload reports from individual client pages.");
-          }}
-        >
-          <Plus className="h-4 w-4" />
-          Upload Report
-        </Button>
+        <div className="flex gap-2">
+          {selectedReports.size >= 2 && (
+            <Button 
+              variant="default"
+              className="gap-2"
+              onClick={() => setIsComparing(true)}
+            >
+              <GitCompare className="h-4 w-4" />
+              Compare ({selectedReports.size})
+            </Button>
+          )}
+          {selectedReports.size > 0 && (
+            <Button 
+              variant="outline"
+              className="gap-2"
+              onClick={() => setSelectedReports(new Set())}
+            >
+              <X className="h-4 w-4" />
+              Clear Selection
+            </Button>
+          )}
+          <Button 
+            className="gap-2"
+            onClick={() => {
+              // TODO: Implement upload dialog
+              alert("Report upload coming soon! For now, you can upload reports from individual client pages.");
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            Upload Report
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -228,6 +278,13 @@ export default function MonthlyReportsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={filteredReports.length > 0 && selectedReports.size === filteredReports.length}
+                      onCheckedChange={toggleSelectAll}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </TableHead>
                   <TableHead className="text-xs uppercase tracking-wider">Report #</TableHead>
                   <TableHead className="text-xs uppercase tracking-wider">Title</TableHead>
                   <TableHead className="text-xs uppercase tracking-wider">Client</TableHead>
@@ -241,9 +298,15 @@ export default function MonthlyReportsPage() {
                 {filteredReports.map((report) => (
                   <TableRow 
                     key={report.id} 
-                    className="hover:bg-muted/30 cursor-pointer"
+                    className={selectedReports.has(report.id) ? "bg-muted/50 hover:bg-muted/70 cursor-pointer" : "hover:bg-muted/30 cursor-pointer"}
                     onClick={() => navigate(`/monthly-reports/${report.id}`)}
                   >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedReports.has(report.id)}
+                        onCheckedChange={() => toggleReportSelection(report.id)}
+                      />
+                    </TableCell>
                     <TableCell className="font-mono text-sm font-medium text-primary">
                       {report.reportNumber}
                     </TableCell>
@@ -337,6 +400,17 @@ export default function MonthlyReportsPage() {
         title="Delete Report"
         itemName={deletingReport?.title}
         isLoading={deleteMutation.isPending}
+      />
+
+      <ReportComparisonDialog
+        open={isComparing}
+        onOpenChange={(open) => {
+          setIsComparing(open);
+          if (!open) {
+            setSelectedReports(new Set());
+          }
+        }}
+        reportIds={Array.from(selectedReports)}
       />
     </div>
   );

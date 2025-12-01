@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { ReportsSidebar } from "@/components/reports-sidebar";
+import { ComparisonGroup } from "@/components/comparison-badge";
+import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 import {
   Table,
   TableBody,
@@ -17,6 +22,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -44,6 +55,8 @@ import {
   ShoppingCart,
   Percent,
   FileSpreadsheet,
+  Download,
+  FileDown,
 } from "lucide-react";
 import {
   BarChart,
@@ -351,6 +364,34 @@ interface GstRateSummary {
   invoiceValue: number;
 }
 
+// Comparison types for MoM/YoY/QoQ metrics
+interface ComparisonMetric {
+  previous: number;
+  change: number;
+  trend: 'up' | 'down' | 'neutral';
+}
+
+interface ComparisonData {
+  current: {
+    period: string;
+    revenue: number;
+    expenses: number;
+    profit: number;
+    margin: number;
+  };
+  mom: { label: string; revenue: ComparisonMetric; expenses: ComparisonMetric; profit: ComparisonMetric };
+  yoy: { label: string; revenue: ComparisonMetric; expenses: ComparisonMetric; profit: ComparisonMetric };
+  qoq: { label: string; revenue: ComparisonMetric; expenses: ComparisonMetric; profit: ComparisonMetric };
+}
+
+interface TrendData {
+  month: string;
+  monthKey: string;
+  revenue: number;
+  expenses: number;
+  profit: number;
+}
+
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
 
 // Period options for reports
@@ -367,6 +408,103 @@ const periodOptions = [
 export default function FinancialReportsPage() {
   const [selectedPeriod, setSelectedPeriod] = useState("this-month");
   const [activeTab, setActiveTab] = useState("revenue-by-client");
+  const [activeReport, setActiveReport] = useState("revenue-by-client");
+  const { user } = useAuth();
+  const { toast } = useToast();
+
+  // Export endpoint mapping
+  const exportEndpointMap: Record<string, string> = {
+    'revenue-by-client': '/api/reports/revenue-by-client/export',
+    'invoice-aging': '/api/reports/invoice-aging/export',
+    'expense-tracking': '/api/reports/expenses-by-category/export',
+    'profit-by-client': '/api/reports/profit-by-client/export',
+    'profit-loss': '/api/reports/profit-loss/export',
+    'balance-sheet': '/api/reports/balance-sheet/export',
+    'cash-flow': '/api/reports/cash-flow/export',
+    'general-ledger': '/api/reports/general-ledger/export',
+    'trial-balance': '/api/reports/trial-balance/export',
+    'fixed-assets': '/api/reports/fixed-asset-register/export',
+    'gst-summary': '/api/reports/gst/gstr3b-summary/export',
+    'gst-sales': '/api/reports/gst/sales-register/export',
+    'gst-purchase': '/api/reports/gst/purchase-register/export',
+    'gst-hsn': '/api/reports/gst/hsn-summary/export',
+    'gst-rate': '/api/reports/gst/rate-summary/export',
+  };
+
+  // Handle report download
+  const handleDownload = async (format: 'pdf' | 'excel') => {
+    const endpoint = exportEndpointMap[activeTab];
+    if (!endpoint) {
+      toast({
+        title: "Export not available",
+        description: "This report type does not support export yet.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const url = `${endpoint}/${format}?period=${selectedPeriod}`;
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${user?.token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `report-${activeTab}-${selectedPeriod}.${format === 'excel' ? 'xlsx' : 'pdf'}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+
+      toast({
+        title: "Download started",
+        description: `Your ${format.toUpperCase()} report is being downloaded.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: "Failed to download the report. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Map sidebar selection to tab values
+  const sidebarToTabMap: Record<string, string> = {
+    'dashboard': 'revenue-by-client',
+    'revenue-by-client': 'revenue-by-client',
+    'invoice-aging': 'invoice-aging',
+    'expenses': 'expense-tracking',
+    'profit-analysis': 'profit-by-client',
+    'profit-loss': 'profit-loss',
+    'balance-sheet': 'balance-sheet',
+    'cash-flow': 'cash-flow',
+    'general-ledger': 'general-ledger',
+    'trial-balance': 'trial-balance',
+    'fixed-assets': 'fixed-assets',
+    'gstr3b-summary': 'gst-summary',
+    'sales-register': 'gst-sales',
+    'purchase-register': 'gst-purchase',
+    'hsn-summary': 'gst-hsn',
+    'rate-summary': 'gst-rate',
+  };
+
+  // Sync sidebar to tabs
+  useEffect(() => {
+    const tabValue = sidebarToTabMap[activeReport];
+    if (tabValue && tabValue !== activeTab) {
+      setActiveTab(tabValue);
+    }
+  }, [activeReport]);
 
   // Fetch report data
   const { data: revenueByClient, isLoading: revenueLoading } = useQuery<RevenueByClient[]>({
@@ -430,7 +568,16 @@ export default function FinancialReportsPage() {
     queryKey: ["/api/reports/gst/rate-summary"],
   });
 
-  // Summary card component
+  // Comparison and Trend Queries
+  const { data: comparisonData } = useQuery<ComparisonData>({
+    queryKey: ["/api/reports/comparison", { period: selectedPeriod }],
+  });
+
+  const { data: trendData } = useQuery<TrendData[]>({
+    queryKey: ["/api/reports/trends"],
+  });
+
+  // Summary card component with comparison support
   const SummaryCard = ({
     title,
     value,
@@ -439,6 +586,7 @@ export default function FinancialReportsPage() {
     trend,
     trendValue,
     color = "primary",
+    comparison,
   }: {
     title: string;
     value: string;
@@ -447,6 +595,11 @@ export default function FinancialReportsPage() {
     trend?: "up" | "down" | "neutral";
     trendValue?: string;
     color?: "primary" | "green" | "red" | "amber" | "blue";
+    comparison?: {
+      mom?: { change: number; trend: 'up' | 'down' | 'neutral' };
+      yoy?: { change: number; trend: 'up' | 'down' | 'neutral' };
+      qoq?: { change: number; trend: 'up' | 'down' | 'neutral' };
+    };
   }) => {
     const colorClasses = {
       primary: "bg-primary/10 text-primary",
@@ -479,116 +632,215 @@ export default function FinancialReportsPage() {
               {trendValue}
             </div>
           )}
+          {comparison && (
+            <ComparisonGroup
+              mom={comparison.mom}
+              yoy={comparison.yoy}
+              qoq={comparison.qoq}
+            />
+          )}
         </CardContent>
       </Card>
     );
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <BarChart3 className="h-6 w-6 text-primary" />
-            Financial Reports
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Comprehensive financial analysis and reporting
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-            <SelectTrigger className="w-[180px]">
-              <Calendar className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Select period" />
-            </SelectTrigger>
-            <SelectContent>
-              {periodOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+    <div className="flex h-[calc(100vh-4rem)]">
+      {/* Sidebar Navigation */}
+      <ReportsSidebar
+        activeReport={activeReport}
+        onReportSelect={setActiveReport}
+      />
 
-      {/* Tabs for different reports */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <div className="space-y-2">
-          <TabsList className="grid grid-cols-5 w-full">
-            <TabsTrigger value="revenue-by-client" className="text-xs">
-              <Users className="h-3.5 w-3.5 mr-1.5" />
-              Revenue by Client
-            </TabsTrigger>
-            <TabsTrigger value="invoice-aging" className="text-xs">
-              <Clock className="h-3.5 w-3.5 mr-1.5" />
-              Invoice Aging
-            </TabsTrigger>
-            <TabsTrigger value="expense-tracking" className="text-xs">
-              <Receipt className="h-3.5 w-3.5 mr-1.5" />
-              Expenses
-            </TabsTrigger>
-            <TabsTrigger value="profit-by-client" className="text-xs">
-              <TrendingUp className="h-3.5 w-3.5 mr-1.5" />
-              Profit Analysis
-            </TabsTrigger>
-            <TabsTrigger value="profit-loss" className="text-xs">
-              <FileText className="h-3.5 w-3.5 mr-1.5" />
-              P&L Statement
-            </TabsTrigger>
-          </TabsList>
-          <TabsList className="grid grid-cols-5 w-full">
-            <TabsTrigger value="balance-sheet" className="text-xs">
-              <Wallet className="h-3.5 w-3.5 mr-1.5" />
-              Balance Sheet
-            </TabsTrigger>
-            <TabsTrigger value="cash-flow" className="text-xs">
-              <PiggyBank className="h-3.5 w-3.5 mr-1.5" />
-              Cash Flow
-            </TabsTrigger>
-            <TabsTrigger value="general-ledger" className="text-xs">
-              <BookOpen className="h-3.5 w-3.5 mr-1.5" />
-              General Ledger
-            </TabsTrigger>
-            <TabsTrigger value="trial-balance" className="text-xs">
-              <Scale className="h-3.5 w-3.5 mr-1.5" />
-              Trial Balance
-            </TabsTrigger>
-            <TabsTrigger value="fixed-assets" className="text-xs">
-              <Package className="h-3.5 w-3.5 mr-1.5" />
-              Fixed Assets
-            </TabsTrigger>
-          </TabsList>
-          {/* GST Compliance Reports Row */}
-          <div className="flex items-center gap-2 pt-2">
-            <span className="text-xs font-medium text-muted-foreground px-2">GST Compliance:</span>
-            <TabsList className="grid grid-cols-5 flex-1">
-              <TabsTrigger value="gst-summary" className="text-xs">
-                <IndianRupee className="h-3.5 w-3.5 mr-1.5" />
-                GSTR-3B Summary
-              </TabsTrigger>
-              <TabsTrigger value="gst-sales" className="text-xs">
-                <FileText className="h-3.5 w-3.5 mr-1.5" />
-                Sales Register
-              </TabsTrigger>
-              <TabsTrigger value="gst-purchase" className="text-xs">
-                <ShoppingCart className="h-3.5 w-3.5 mr-1.5" />
-                Purchase Register
-              </TabsTrigger>
-              <TabsTrigger value="gst-hsn" className="text-xs">
-                <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
-                HSN/SAC Summary
-              </TabsTrigger>
-              <TabsTrigger value="gst-rate" className="text-xs">
-                <Percent className="h-3.5 w-3.5 mr-1.5" />
-                Rate-wise
-              </TabsTrigger>
-            </TabsList>
+      {/* Main Content */}
+      <div className="flex-1 overflow-auto p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              <BarChart3 className="h-6 w-6 text-primary" />
+              Financial Reports
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Comprehensive financial analysis and reporting
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+              <SelectTrigger className="w-[180px]">
+                <Calendar className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Select period" />
+              </SelectTrigger>
+              <SelectContent>
+                {periodOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Download Dropdown */}
+            {activeReport !== "comparison" && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    <Download className="h-4 w-4" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleDownload('pdf')} className="gap-2">
+                    <FileDown className="h-4 w-4 text-red-500" />
+                    Download PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleDownload('excel')} className="gap-2">
+                    <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                    Download Excel
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
 
+        {/* Comparison View */}
+        {activeReport === "comparison" && (
+          <div className="space-y-6">
+            {/* Comparison Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <SummaryCard
+                title="Revenue"
+                value={formatCurrency(comparisonData?.current.revenue || 0)}
+                icon={DollarSign}
+                color="green"
+                comparison={comparisonData ? {
+                  mom: { change: comparisonData.mom.revenue.change, trend: comparisonData.mom.revenue.trend },
+                  yoy: { change: comparisonData.yoy.revenue.change, trend: comparisonData.yoy.revenue.trend },
+                  qoq: { change: comparisonData.qoq.revenue.change, trend: comparisonData.qoq.revenue.trend },
+                } : undefined}
+              />
+              <SummaryCard
+                title="Expenses"
+                value={formatCurrency(comparisonData?.current.expenses || 0)}
+                icon={Receipt}
+                color="red"
+                comparison={comparisonData ? {
+                  mom: { change: comparisonData.mom.expenses.change, trend: comparisonData.mom.expenses.trend },
+                  yoy: { change: comparisonData.yoy.expenses.change, trend: comparisonData.yoy.expenses.trend },
+                  qoq: { change: comparisonData.qoq.expenses.change, trend: comparisonData.qoq.expenses.trend },
+                } : undefined}
+              />
+              <SummaryCard
+                title="Net Profit"
+                value={formatCurrency(comparisonData?.current.profit || 0)}
+                icon={TrendingUp}
+                color="blue"
+                comparison={comparisonData ? {
+                  mom: { change: comparisonData.mom.profit.change, trend: comparisonData.mom.profit.trend },
+                  yoy: { change: comparisonData.yoy.profit.change, trend: comparisonData.yoy.profit.trend },
+                  qoq: { change: comparisonData.qoq.profit.change, trend: comparisonData.qoq.profit.trend },
+                } : undefined}
+              />
+              <SummaryCard
+                title="Profit Margin"
+                value={`${comparisonData?.current.margin?.toFixed(1) || 0}%`}
+                icon={Percent}
+                color="amber"
+              />
+            </div>
+
+            {/* Trend Chart */}
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg">12-Month Trend</CardTitle>
+                <CardDescription>Revenue, expenses, and profit over the last 12 months</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trendData || []}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="month" className="text-xs" />
+                      <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} className="text-xs" />
+                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                      <Legend />
+                      <Area type="monotone" dataKey="revenue" name="Revenue" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.2} />
+                      <Area type="monotone" dataKey="expenses" name="Expenses" stackId="2" stroke="#ef4444" fill="#ef4444" fillOpacity={0.2} />
+                      <Area type="monotone" dataKey="profit" name="Profit" stackId="3" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Period Comparison Table */}
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg">Period Comparison</CardTitle>
+                <CardDescription>Compare metrics across different time periods</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Metric</TableHead>
+                      <TableHead className="text-right">Current</TableHead>
+                      <TableHead className="text-right">MoM</TableHead>
+                      <TableHead className="text-right">YoY</TableHead>
+                      <TableHead className="text-right">QoQ</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell className="font-medium">Revenue</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(comparisonData?.current.revenue || 0)}</TableCell>
+                      <TableCell className={cn("text-right font-mono", comparisonData?.mom.revenue.trend === 'up' ? "text-green-600" : comparisonData?.mom.revenue.trend === 'down' ? "text-red-600" : "")}>
+                        {(comparisonData?.mom.revenue.change || 0) > 0 ? '+' : ''}{(comparisonData?.mom.revenue.change || 0).toFixed(1)}%
+                      </TableCell>
+                      <TableCell className={cn("text-right font-mono", comparisonData?.yoy.revenue.trend === 'up' ? "text-green-600" : comparisonData?.yoy.revenue.trend === 'down' ? "text-red-600" : "")}>
+                        {(comparisonData?.yoy.revenue.change || 0) > 0 ? '+' : ''}{(comparisonData?.yoy.revenue.change || 0).toFixed(1)}%
+                      </TableCell>
+                      <TableCell className={cn("text-right font-mono", comparisonData?.qoq.revenue.trend === 'up' ? "text-green-600" : comparisonData?.qoq.revenue.trend === 'down' ? "text-red-600" : "")}>
+                        {(comparisonData?.qoq.revenue.change || 0) > 0 ? '+' : ''}{(comparisonData?.qoq.revenue.change || 0).toFixed(1)}%
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">Expenses</TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(comparisonData?.current.expenses || 0)}</TableCell>
+                      <TableCell className={cn("text-right font-mono", comparisonData?.mom.expenses.trend === 'down' ? "text-green-600" : comparisonData?.mom.expenses.trend === 'up' ? "text-red-600" : "")}>
+                        {(comparisonData?.mom.expenses.change || 0) > 0 ? '+' : ''}{(comparisonData?.mom.expenses.change || 0).toFixed(1)}%
+                      </TableCell>
+                      <TableCell className={cn("text-right font-mono", comparisonData?.yoy.expenses.trend === 'down' ? "text-green-600" : comparisonData?.yoy.expenses.trend === 'up' ? "text-red-600" : "")}>
+                        {(comparisonData?.yoy.expenses.change || 0) > 0 ? '+' : ''}{(comparisonData?.yoy.expenses.change || 0).toFixed(1)}%
+                      </TableCell>
+                      <TableCell className={cn("text-right font-mono", comparisonData?.qoq.expenses.trend === 'down' ? "text-green-600" : comparisonData?.qoq.expenses.trend === 'up' ? "text-red-600" : "")}>
+                        {(comparisonData?.qoq.expenses.change || 0) > 0 ? '+' : ''}{(comparisonData?.qoq.expenses.change || 0).toFixed(1)}%
+                      </TableCell>
+                    </TableRow>
+                    <TableRow className="bg-muted/50">
+                      <TableCell className="font-semibold">Net Profit</TableCell>
+                      <TableCell className="text-right font-mono font-semibold">{formatCurrency(comparisonData?.current.profit || 0)}</TableCell>
+                      <TableCell className={cn("text-right font-mono font-semibold", comparisonData?.mom.profit.trend === 'up' ? "text-green-600" : comparisonData?.mom.profit.trend === 'down' ? "text-red-600" : "")}>
+                        {(comparisonData?.mom.profit.change || 0) > 0 ? '+' : ''}{(comparisonData?.mom.profit.change || 0).toFixed(1)}%
+                      </TableCell>
+                      <TableCell className={cn("text-right font-mono font-semibold", comparisonData?.yoy.profit.trend === 'up' ? "text-green-600" : comparisonData?.yoy.profit.trend === 'down' ? "text-red-600" : "")}>
+                        {(comparisonData?.yoy.profit.change || 0) > 0 ? '+' : ''}{(comparisonData?.yoy.profit.change || 0).toFixed(1)}%
+                      </TableCell>
+                      <TableCell className={cn("text-right font-mono font-semibold", comparisonData?.qoq.profit.trend === 'up' ? "text-green-600" : comparisonData?.qoq.profit.trend === 'down' ? "text-red-600" : "")}>
+                        {(comparisonData?.qoq.profit.change || 0) > 0 ? '+' : ''}{(comparisonData?.qoq.profit.change || 0).toFixed(1)}%
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Reports content - controlled by sidebar navigation */}
+        {activeReport !== "comparison" && (
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         {/* Revenue by Client Tab */}
         <TabsContent value="revenue-by-client" className="space-y-6">
           {revenueLoading ? (
@@ -2313,6 +2565,8 @@ export default function FinancialReportsPage() {
           )}
         </TabsContent>
       </Tabs>
+        )}
+      </div>
     </div>
   );
 }

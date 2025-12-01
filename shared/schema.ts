@@ -1531,3 +1531,53 @@ export const insertFixedAssetSchema = z.object({
 });
 
 export type InsertFixedAsset = z.infer<typeof insertFixedAssetSchema>;
+
+// ============================================
+// PAYMENT GATEWAY SETTINGS
+// ============================================
+
+export const paymentGatewayTypes = ["STRIPE", "RAZORPAY", "NONE"] as const;
+
+export interface PaymentGatewaySettings {
+  _id?: string;
+  id: string;
+  activeGateway: "STRIPE" | "RAZORPAY" | "NONE";
+  stripe: {
+    publicKey: string;
+    secretKey: string;
+    webhookSecret: string;
+    isTestMode: boolean;
+  };
+  razorpay: {
+    keyId: string;
+    keySecret: string;
+    webhookSecret: string;
+    isTestMode: boolean;
+  };
+  enabledMethods: string[]; // ["card", "upi", "netbanking", "wallet"]
+  currency: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const insertPaymentGatewaySettingsSchema = z.object({
+  activeGateway: z.enum(["STRIPE", "RAZORPAY", "NONE"]).default("NONE"),
+  stripe: z.object({
+    publicKey: z.string().default(""),
+    secretKey: z.string().default(""),
+    webhookSecret: z.string().default(""),
+    isTestMode: z.boolean().default(true),
+  }).default({}),
+  razorpay: z.object({
+    keyId: z.string().default(""),
+    keySecret: z.string().default(""),
+    webhookSecret: z.string().default(""),
+    isTestMode: z.boolean().default(true),
+  }).default({}),
+  enabledMethods: z.array(z.string()).default(["card"]),
+  currency: z.string().default("INR"),
+  isActive: z.boolean().default(false),
+});
+
+export type InsertPaymentGatewaySettings = z.infer<typeof insertPaymentGatewaySettingsSchema>;

@@ -68,6 +68,8 @@ import {
   type SlackAttendanceLogWithDetails,
   type FixedAsset,
   type InsertFixedAsset,
+  type PaymentGatewaySettings,
+  type InsertPaymentGatewaySettings,
 } from "@shared/schema";
 import { nanoid } from "nanoid";
 
@@ -330,6 +332,10 @@ export interface IStorage {
   createFixedAsset(asset: InsertFixedAsset): Promise<FixedAsset>;
   updateFixedAsset(id: string, asset: Partial<InsertFixedAsset>): Promise<FixedAsset>;
   deleteFixedAsset(id: string): Promise<void>;
+
+  // Payment Gateway Settings methods
+  getPaymentGatewaySettings(): Promise<PaymentGatewaySettings | undefined>;
+  savePaymentGatewaySettings(settings: InsertPaymentGatewaySettings): Promise<PaymentGatewaySettings>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3801,6 +3807,49 @@ export class DatabaseStorage implements IStorage {
   async deleteFixedAsset(id: string): Promise<void> {
     const db = await getDb();
     await db.collection("fixedAssets").deleteOne({ id });
+  }
+
+  // Payment Gateway Settings methods
+  async getPaymentGatewaySettings(): Promise<PaymentGatewaySettings | undefined> {
+    const db = await getDb();
+    const doc = await db.collection("paymentGatewaySettings").findOne({});
+    return doc ? toSchema<PaymentGatewaySettings>(doc) : undefined;
+  }
+
+  async savePaymentGatewaySettings(settings: InsertPaymentGatewaySettings): Promise<PaymentGatewaySettings> {
+    const db = await getDb();
+    const existing = await db.collection("paymentGatewaySettings").findOne({});
+
+    if (existing) {
+      // Update existing settings
+      const updateData = {
+        ...settings,
+        updatedAt: new Date(),
+      };
+      await db.collection("paymentGatewaySettings").updateOne(
+        { id: existing.id },
+        { $set: updateData }
+      );
+      return toSchema<PaymentGatewaySettings>({
+        ...existing,
+        ...updateData,
+      });
+    } else {
+      // Create new settings
+      const newSettings: PaymentGatewaySettings = {
+        id: nanoid(),
+        activeGateway: settings.activeGateway || "NONE",
+        stripe: settings.stripe || { publicKey: "", secretKey: "", webhookSecret: "", isTestMode: true },
+        razorpay: settings.razorpay || { keyId: "", keySecret: "", webhookSecret: "", isTestMode: true },
+        enabledMethods: settings.enabledMethods || ["card"],
+        currency: settings.currency || "INR",
+        isActive: settings.isActive || false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await db.collection("paymentGatewaySettings").insertOne(newSettings);
+      return toSchema<PaymentGatewaySettings>(newSettings);
+    }
   }
 }
 

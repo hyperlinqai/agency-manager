@@ -973,6 +973,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return { fromDate, toDate };
   };
 
+  // Helper function to calculate percentage change
+  const calculateChange = (current: number, previous: number): number => {
+    if (previous === 0) return current > 0 ? 100 : 0;
+    return Number((((current - previous) / previous) * 100).toFixed(1));
+  };
+
+  // Helper function to determine trend
+  const getTrend = (change: number): 'up' | 'down' | 'neutral' => {
+    if (change > 0) return 'up';
+    if (change < 0) return 'down';
+    return 'neutral';
+  };
+
+  // Helper function to get comparison date ranges
+  const getComparisonRanges = (basePeriod: string) => {
+    const now = new Date();
+    const current = getDateRange(basePeriod);
+
+    // Previous month
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+
+    // Same month last year
+    const sameMonthLastYearStart = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+    const sameMonthLastYearEnd = new Date(now.getFullYear() - 1, now.getMonth() + 1, 0, 23, 59, 59);
+
+    // Previous quarter
+    const currentQuarter = Math.floor(now.getMonth() / 3);
+    const prevQuarterStart = new Date(now.getFullYear(), (currentQuarter - 1) * 3, 1);
+    const prevQuarterEnd = new Date(now.getFullYear(), currentQuarter * 3, 0, 23, 59, 59);
+
+    return {
+      current,
+      previousMonth: { fromDate: prevMonthStart, toDate: prevMonthEnd },
+      sameMonthLastYear: { fromDate: sameMonthLastYearStart, toDate: sameMonthLastYearEnd },
+      previousQuarter: { fromDate: prevQuarterStart, toDate: prevQuarterEnd }
+    };
+  };
+
+  // Helper to calculate revenue for a date range
+  const calculateRevenueForRange = (
+    invoices: any[],
+    fromDate: Date,
+    toDate: Date
+  ): number => {
+    return invoices
+      .filter(inv => {
+        const issueDate = new Date(inv.issueDate);
+        return issueDate >= fromDate && issueDate <= toDate;
+      })
+      .reduce((sum, inv) => sum + Number(inv.totalAmount || 0), 0);
+  };
+
+  // Helper to calculate expenses for a date range
+  const calculateExpensesForRange = (
+    expenses: any[],
+    fromDate: Date,
+    toDate: Date
+  ): number => {
+    return expenses
+      .filter(exp => {
+        const expenseDate = new Date(exp.expenseDate);
+        return expenseDate >= fromDate && expenseDate <= toDate;
+      })
+      .reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+  };
+
   // Revenue by Client Report
   app.get("/api/reports/revenue-by-client", authenticateToken, async (req, res) => {
     try {
@@ -2067,6 +2134,883 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .sort((a, b) => a.rate - b.rate);
 
       res.json(entries);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // ============================================
+  // COMPARISON REPORTS ENDPOINT
+  // ============================================
+
+  // Comprehensive comparison report endpoint
+  app.get("/api/reports/comparison", authenticateToken, async (req, res) => {
+    try {
+      const { period = "this-month" } = req.query;
+      const ranges = getComparisonRanges(period as string);
+
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+
+      // Calculate metrics for each period
+      const currentRevenue = calculateRevenueForRange(invoices, ranges.current.fromDate, ranges.current.toDate);
+      const currentExpenses = calculateExpensesForRange(expenses, ranges.current.fromDate, ranges.current.toDate);
+      const currentProfit = currentRevenue - currentExpenses;
+
+      const prevMonthRevenue = calculateRevenueForRange(invoices, ranges.previousMonth.fromDate, ranges.previousMonth.toDate);
+      const prevMonthExpenses = calculateExpensesForRange(expenses, ranges.previousMonth.fromDate, ranges.previousMonth.toDate);
+      const prevMonthProfit = prevMonthRevenue - prevMonthExpenses;
+
+      const lastYearRevenue = calculateRevenueForRange(invoices, ranges.sameMonthLastYear.fromDate, ranges.sameMonthLastYear.toDate);
+      const lastYearExpenses = calculateExpensesForRange(expenses, ranges.sameMonthLastYear.fromDate, ranges.sameMonthLastYear.toDate);
+      const lastYearProfit = lastYearRevenue - lastYearExpenses;
+
+      const prevQuarterRevenue = calculateRevenueForRange(invoices, ranges.previousQuarter.fromDate, ranges.previousQuarter.toDate);
+      const prevQuarterExpenses = calculateExpensesForRange(expenses, ranges.previousQuarter.fromDate, ranges.previousQuarter.toDate);
+      const prevQuarterProfit = prevQuarterRevenue - prevQuarterExpenses;
+
+      // Build comparison response
+      const comparison = {
+        current: {
+          period: period,
+          revenue: currentRevenue,
+          expenses: currentExpenses,
+          profit: currentProfit,
+          margin: currentRevenue > 0 ? Number(((currentProfit / currentRevenue) * 100).toFixed(1)) : 0
+        },
+        mom: {
+          label: "vs Last Month",
+          revenue: {
+            previous: prevMonthRevenue,
+            change: calculateChange(currentRevenue, prevMonthRevenue),
+            trend: getTrend(calculateChange(currentRevenue, prevMonthRevenue))
+          },
+          expenses: {
+            previous: prevMonthExpenses,
+            change: calculateChange(currentExpenses, prevMonthExpenses),
+            trend: getTrend(calculateChange(currentExpenses, prevMonthExpenses))
+          },
+          profit: {
+            previous: prevMonthProfit,
+            change: calculateChange(currentProfit, prevMonthProfit),
+            trend: getTrend(calculateChange(currentProfit, prevMonthProfit))
+          }
+        },
+        yoy: {
+          label: "vs Same Month Last Year",
+          revenue: {
+            previous: lastYearRevenue,
+            change: calculateChange(currentRevenue, lastYearRevenue),
+            trend: getTrend(calculateChange(currentRevenue, lastYearRevenue))
+          },
+          expenses: {
+            previous: lastYearExpenses,
+            change: calculateChange(currentExpenses, lastYearExpenses),
+            trend: getTrend(calculateChange(currentExpenses, lastYearExpenses))
+          },
+          profit: {
+            previous: lastYearProfit,
+            change: calculateChange(currentProfit, lastYearProfit),
+            trend: getTrend(calculateChange(currentProfit, lastYearProfit))
+          }
+        },
+        qoq: {
+          label: "vs Last Quarter",
+          revenue: {
+            previous: prevQuarterRevenue,
+            change: calculateChange(currentRevenue, prevQuarterRevenue),
+            trend: getTrend(calculateChange(currentRevenue, prevQuarterRevenue))
+          },
+          expenses: {
+            previous: prevQuarterExpenses,
+            change: calculateChange(currentExpenses, prevQuarterExpenses),
+            trend: getTrend(calculateChange(currentExpenses, prevQuarterExpenses))
+          },
+          profit: {
+            previous: prevQuarterProfit,
+            change: calculateChange(currentProfit, prevQuarterProfit),
+            trend: getTrend(calculateChange(currentProfit, prevQuarterProfit))
+          }
+        }
+      };
+
+      res.json(comparison);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Monthly trend data for charts (last 12 months)
+  app.get("/api/reports/trends", authenticateToken, async (req, res) => {
+    try {
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+
+      const now = new Date();
+      const trends = [];
+
+      for (let i = 11; i >= 0; i--) {
+        const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59);
+
+        const monthRevenue = calculateRevenueForRange(invoices, monthStart, monthEnd);
+        const monthExpenses = calculateExpensesForRange(expenses, monthStart, monthEnd);
+
+        trends.push({
+          month: monthStart.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+          monthKey: `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}`,
+          revenue: monthRevenue,
+          expenses: monthExpenses,
+          profit: monthRevenue - monthExpenses
+        });
+      }
+
+      res.json(trends);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // ============================================
+  // REPORT EXPORT ENDPOINTS (PDF & Excel)
+  // ============================================
+  const { generateExcel, generatePDF, reportConfigs } = await import("./report-export");
+
+  // Get company profile for reports
+  const getCompanyInfo = async () => {
+    const profile = await storage.getCompanyProfile();
+    return profile?.companyName || "HQ CRM";
+  };
+
+  // Revenue by Client Export
+  app.get("/api/reports/revenue-by-client/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      const { period = "all-time" } = req.query;
+      const { fromDate, toDate } = getDateRange(period as string);
+
+      const clients = await storage.getClients({});
+      const invoices = await storage.getInvoices({});
+
+      // Use same logic as the UI endpoint
+      const revenueByClient = clients.map((client) => {
+        const clientInvoices = invoices.filter(
+          (inv) =>
+            inv.clientId === client.id &&
+            new Date(inv.issueDate) >= fromDate &&
+            new Date(inv.issueDate) <= toDate
+        );
+
+        const totalInvoiced = clientInvoices.reduce((sum, inv) => sum + Number(inv.totalAmount || 0), 0);
+
+        return {
+          clientName: client.name,
+          totalRevenue: totalInvoiced,
+          invoiceCount: clientInvoices.length,
+        };
+      });
+
+      // Filter and sort like UI endpoint
+      const exportData = revenueByClient
+        .filter((c) => c.invoiceCount > 0)
+        .sort((a, b) => b.totalRevenue - a.totalRevenue)
+        .map(({ clientName, totalRevenue }) => ({ clientName, totalRevenue }));
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.revenueByClient;
+      const periodLabel = period === "all-time" ? "All Time" : period;
+
+      if (format === "excel") {
+        await generateExcel(res, {
+          ...config,
+          data: exportData,
+          companyName,
+          dateRange: `Period: ${periodLabel} (${fromDate.toLocaleDateString("en-IN")} - ${toDate.toLocaleDateString("en-IN")})`,
+          summary: [{ label: "Total Revenue", value: exportData.reduce((sum, r) => sum + r.totalRevenue, 0) }],
+        });
+      } else if (format === "pdf") {
+        generatePDF(res, {
+          ...config,
+          data: exportData,
+          companyName,
+          dateRange: `Period: ${periodLabel} (${fromDate.toLocaleDateString("en-IN")} - ${toDate.toLocaleDateString("en-IN")})`,
+          summary: [{ label: "Total Revenue", value: exportData.reduce((sum, r) => sum + r.totalRevenue, 0) }],
+        });
+      } else {
+        res.status(400).json({ error: "Invalid format. Use 'excel' or 'pdf'" });
+      }
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Invoice Aging Export
+  app.get("/api/reports/invoice-aging/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      const invoices = await storage.getInvoices({});
+      const clients = await storage.getClients({});
+      const clientMap = new Map(clients.map((c) => [c.id, c.name]));
+
+      const today = new Date();
+      const exportData = invoices
+        .filter((inv) => inv.status !== "PAID" && inv.dueDate)
+        .map((inv) => {
+          const dueDate = new Date(inv.dueDate!);
+          const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+          let agingBucket = "Current";
+          if (daysOverdue > 90) agingBucket = "90+ Days";
+          else if (daysOverdue > 60) agingBucket = "61-90 Days";
+          else if (daysOverdue > 30) agingBucket = "31-60 Days";
+          else if (daysOverdue > 0) agingBucket = "1-30 Days";
+
+          return {
+            clientName: clientMap.get(inv.clientId) || "Unknown",
+            invoiceNumber: inv.invoiceNumber,
+            amount: (inv.totalAmount || 0) - (inv.amountPaid || 0),
+            dueDate: new Date(inv.dueDate!).toLocaleDateString("en-IN"),
+            daysOverdue: Math.max(0, daysOverdue),
+            agingBucket,
+          };
+        });
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.invoiceAging;
+
+      if (format === "excel") {
+        await generateExcel(res, {
+          ...config,
+          data: exportData,
+          companyName,
+          dateRange: `As of ${new Date().toLocaleDateString("en-IN")}`,
+          summary: [{ label: "Total Outstanding", value: exportData.reduce((sum, r) => sum + r.amount, 0) }],
+        });
+      } else if (format === "pdf") {
+        generatePDF(res, {
+          ...config,
+          data: exportData,
+          companyName,
+          dateRange: `As of ${new Date().toLocaleDateString("en-IN")}`,
+          summary: [{ label: "Total Outstanding", value: exportData.reduce((sum, r) => sum + r.amount, 0) }],
+          orientation: "landscape",
+        });
+      } else {
+        res.status(400).json({ error: "Invalid format" });
+      }
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Expenses by Category Export
+  app.get("/api/reports/expenses-by-category/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      const expenses = await storage.getExpenses({});
+
+      const byCategory = expenses.reduce((acc, exp) => {
+        const cat = exp.category || "Uncategorized";
+        if (!acc[cat]) acc[cat] = { amount: 0, count: 0 };
+        acc[cat].amount += exp.amount || 0;
+        acc[cat].count++;
+        return acc;
+      }, {} as Record<string, { amount: number; count: number }>);
+
+      const total = Object.values(byCategory).reduce((sum, v) => sum + v.amount, 0);
+      const exportData = Object.entries(byCategory).map(([category, data]) => ({
+        category,
+        amount: data.amount,
+        percentage: `${((data.amount / total) * 100).toFixed(1)}%`,
+        count: data.count,
+      }));
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.expensesByCategory;
+
+      if (format === "excel") {
+        await generateExcel(res, { ...config, data: exportData, companyName, summary: [{ label: "Total Expenses", value: total }] });
+      } else if (format === "pdf") {
+        generatePDF(res, { ...config, data: exportData, companyName, summary: [{ label: "Total Expenses", value: total }] });
+      } else {
+        res.status(400).json({ error: "Invalid format" });
+      }
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Profit by Client Export
+  app.get("/api/reports/profit-by-client/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+      const clients = await storage.getClients({});
+      const clientMap = new Map(clients.map((c) => [c.id, c.name]));
+
+      const revenueByClient = invoices.reduce((acc, inv) => {
+        acc[inv.clientId] = (acc[inv.clientId] || 0) + (inv.amountPaid || 0);
+        return acc;
+      }, {} as Record<string, number>);
+
+      const expensesByClient = expenses.reduce((acc, exp) => {
+        if (exp.clientId) acc[exp.clientId] = (acc[exp.clientId] || 0) + (exp.amount || 0);
+        return acc;
+      }, {} as Record<string, number>);
+
+      const exportData = clients.map((client) => {
+        const revenue = revenueByClient[client.id] || 0;
+        const clientExpenses = expensesByClient[client.id] || 0;
+        const profit = revenue - clientExpenses;
+        const margin = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) + "%" : "0%";
+        return { clientName: client.name, revenue, expenses: clientExpenses, profit, margin };
+      });
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.profitByClient;
+      const totalProfit = exportData.reduce((sum, r) => sum + r.profit, 0);
+
+      if (format === "excel") {
+        await generateExcel(res, { ...config, data: exportData, companyName, summary: [{ label: "Total Profit", value: totalProfit }] });
+      } else if (format === "pdf") {
+        generatePDF(res, { ...config, data: exportData, companyName, summary: [{ label: "Total Profit", value: totalProfit }] });
+      } else {
+        res.status(400).json({ error: "Invalid format" });
+      }
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // P&L Statement Export
+  app.get("/api/reports/profit-loss/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+      const salaries = await storage.getSalaryPayments({});
+
+      const totalRevenue = invoices.reduce((sum, inv) => sum + (inv.amountPaid || 0), 0);
+      const totalExpenses = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+      const totalSalaries = salaries.reduce((sum, sal) => sum + (sal.amount || 0), 0);
+      const netProfit = totalRevenue - totalExpenses - totalSalaries;
+
+      const exportData = [
+        { particulars: "REVENUE", amount: "" },
+        { particulars: "  Sales Revenue", amount: totalRevenue },
+        { particulars: "  Total Revenue", amount: totalRevenue },
+        { particulars: "", amount: "" },
+        { particulars: "EXPENSES", amount: "" },
+        { particulars: "  Operating Expenses", amount: totalExpenses },
+        { particulars: "  Salary Expenses", amount: totalSalaries },
+        { particulars: "  Total Expenses", amount: totalExpenses + totalSalaries },
+        { particulars: "", amount: "" },
+        { particulars: "NET PROFIT / (LOSS)", amount: netProfit },
+      ];
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.profitLoss;
+
+      if (format === "excel") {
+        await generateExcel(res, { ...config, data: exportData, companyName, dateRange: `For the period ending ${new Date().toLocaleDateString("en-IN")}` });
+      } else if (format === "pdf") {
+        generatePDF(res, { ...config, data: exportData, companyName, dateRange: `For the period ending ${new Date().toLocaleDateString("en-IN")}` });
+      } else {
+        res.status(400).json({ error: "Invalid format" });
+      }
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Balance Sheet Export
+  app.get("/api/reports/balance-sheet/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+      const salaries = await storage.getSalaryPayments({});
+
+      const cashReceived = invoices.reduce((sum, inv) => sum + (inv.amountPaid || 0), 0);
+      const cashPaid = expenses.filter((e) => e.status === "PAID").reduce((sum, e) => sum + (e.amount || 0), 0)
+        + salaries.filter((s) => s.status === "PAID").reduce((sum, s) => sum + (s.amount || 0), 0);
+      const receivables = invoices.reduce((sum, inv) => sum + ((inv.totalAmount || 0) - (inv.amountPaid || 0)), 0);
+      const payables = expenses.filter((e) => e.status !== "PAID").reduce((sum, e) => sum + (e.amount || 0), 0);
+      const salaryPayable = salaries.filter((s) => s.status !== "PAID").reduce((sum, s) => sum + (s.amount || 0), 0);
+
+      const totalAssets = cashReceived - cashPaid + receivables;
+      const totalLiabilities = payables + salaryPayable;
+      const equity = totalAssets - totalLiabilities;
+
+      const exportData = [
+        { particulars: "ASSETS", amount: "" },
+        { particulars: "  Cash & Bank", amount: cashReceived - cashPaid },
+        { particulars: "  Accounts Receivable", amount: receivables },
+        { particulars: "  Total Assets", amount: totalAssets },
+        { particulars: "", amount: "" },
+        { particulars: "LIABILITIES", amount: "" },
+        { particulars: "  Accounts Payable", amount: payables },
+        { particulars: "  Salary Payable", amount: salaryPayable },
+        { particulars: "  Total Liabilities", amount: totalLiabilities },
+        { particulars: "", amount: "" },
+        { particulars: "EQUITY", amount: "" },
+        { particulars: "  Retained Earnings", amount: equity },
+        { particulars: "  Total Equity", amount: equity },
+      ];
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.balanceSheet;
+
+      if (format === "excel") {
+        await generateExcel(res, { ...config, data: exportData, companyName, dateRange: `As at ${new Date().toLocaleDateString("en-IN")}` });
+      } else if (format === "pdf") {
+        generatePDF(res, { ...config, data: exportData, companyName, dateRange: `As at ${new Date().toLocaleDateString("en-IN")}` });
+      } else {
+        res.status(400).json({ error: "Invalid format" });
+      }
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Cash Flow Export
+  app.get("/api/reports/cash-flow/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+      const salaries = await storage.getSalaryPayments({});
+
+      const payments: { date: Date; amount: number; type: "inflow" | "outflow" }[] = [];
+      invoices.forEach((inv) => {
+        if (inv.amountPaid && inv.amountPaid > 0) {
+          payments.push({ date: new Date(inv.issueDate), amount: inv.amountPaid, type: "inflow" });
+        }
+      });
+      expenses.filter((e) => e.status === "PAID" && e.paidDate).forEach((e) => {
+        payments.push({ date: new Date(e.paidDate!), amount: e.amount || 0, type: "outflow" });
+      });
+      salaries.filter((s) => s.status === "PAID" && s.paymentDate).forEach((s) => {
+        payments.push({ date: new Date(s.paymentDate!), amount: s.amount || 0, type: "outflow" });
+      });
+
+      const monthlyData: Map<string, { inflows: number; outflows: number }> = new Map();
+      payments.forEach((p) => {
+        const key = `${p.date.getFullYear()}-${String(p.date.getMonth() + 1).padStart(2, "0")}`;
+        const existing = monthlyData.get(key) || { inflows: 0, outflows: 0 };
+        if (p.type === "inflow") existing.inflows += p.amount;
+        else existing.outflows += p.amount;
+        monthlyData.set(key, existing);
+      });
+
+      let runningBalance = 0;
+      const exportData = Array.from(monthlyData.keys()).sort().slice(-12).map((month) => {
+        const data = monthlyData.get(month)!;
+        const openingBalance = runningBalance;
+        const netCashFlow = data.inflows - data.outflows;
+        runningBalance += netCashFlow;
+        return { period: month, openingBalance, inflows: data.inflows, outflows: data.outflows, netCashFlow, closingBalance: runningBalance };
+      });
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.cashFlow;
+
+      if (format === "excel") {
+        await generateExcel(res, { ...config, data: exportData, companyName, orientation: "landscape" });
+      } else if (format === "pdf") {
+        generatePDF(res, { ...config, data: exportData, companyName, orientation: "landscape" });
+      } else {
+        res.status(400).json({ error: "Invalid format" });
+      }
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // General Ledger Export
+  app.get("/api/reports/general-ledger/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      // Reuse the general ledger logic
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+      const salaries = await storage.getSalaryPayments({});
+      const clients = await storage.getClients({});
+      const vendors = await storage.getVendors({});
+
+      const clientMap = new Map(clients.map((c) => [c.id, c.name]));
+      const vendorMap = new Map(vendors.map((v) => [v.id, v.name]));
+
+      const entries: any[] = [];
+      invoices.forEach((inv) => {
+        const clientName = clientMap.get(inv.clientId) || "Unknown";
+        entries.push({ date: new Date(inv.issueDate).toISOString().split("T")[0], voucherNo: inv.invoiceNumber, particulars: `Invoice - ${clientName}`, accountHead: "Sales Revenue", debit: 0, credit: inv.totalAmount || 0, balance: 0 });
+        if (inv.amountPaid && inv.amountPaid > 0) {
+          entries.push({ date: new Date(inv.issueDate).toISOString().split("T")[0], voucherNo: `PMT-${inv.invoiceNumber}`, particulars: `Payment - ${clientName}`, accountHead: "Cash/Bank", debit: inv.amountPaid, credit: 0, balance: 0 });
+        }
+      });
+      expenses.forEach((exp, i) => {
+        entries.push({ date: new Date(exp.expenseDate).toISOString().split("T")[0], voucherNo: `EXP-${String(i + 1).padStart(4, "0")}`, particulars: exp.description, accountHead: exp.category || "Expenses", debit: exp.amount || 0, credit: 0, balance: 0 });
+      });
+      salaries.forEach((sal, i) => {
+        entries.push({ date: sal.month + "-01", voucherNo: `SAL-${String(i + 1).padStart(4, "0")}`, particulars: `Salary - ${sal.month}`, accountHead: "Salary Expense", debit: sal.amount || 0, credit: 0, balance: 0 });
+      });
+
+      entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      let balance = 0;
+      entries.forEach((e) => { balance += e.debit - e.credit; e.balance = balance; });
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.generalLedger;
+
+      if (format === "excel") {
+        await generateExcel(res, { ...config, data: entries, companyName, orientation: "landscape" });
+      } else if (format === "pdf") {
+        generatePDF(res, { ...config, data: entries, companyName, orientation: "landscape" });
+      } else {
+        res.status(400).json({ error: "Invalid format" });
+      }
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Trial Balance Export
+  app.get("/api/reports/trial-balance/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+      const salaries = await storage.getSalaryPayments({});
+
+      const accounts: Map<string, { debit: number; credit: number; type: string }> = new Map();
+      const addToAccount = (name: string, debit: number, credit: number, type: string) => {
+        const existing = accounts.get(name) || { debit: 0, credit: 0, type };
+        existing.debit += debit;
+        existing.credit += credit;
+        accounts.set(name, existing);
+      };
+
+      const cashReceived = invoices.reduce((sum, inv) => sum + (inv.amountPaid || 0), 0);
+      const cashPaid = expenses.filter((e) => e.status === "PAID").reduce((sum, e) => sum + (e.amount || 0), 0)
+        + salaries.filter((s) => s.status === "PAID").reduce((sum, s) => sum + (s.amount || 0), 0);
+      addToAccount("Cash & Bank", cashReceived, cashPaid, "ASSET");
+
+      const receivable = invoices.reduce((sum, inv) => sum + ((inv.totalAmount || 0) - (inv.amountPaid || 0)), 0);
+      if (receivable > 0) addToAccount("Accounts Receivable", receivable, 0, "ASSET");
+
+      const payable = expenses.filter((e) => e.status !== "PAID").reduce((sum, e) => sum + (e.amount || 0), 0);
+      if (payable > 0) addToAccount("Accounts Payable", 0, payable, "LIABILITY");
+
+      const revenue = invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
+      addToAccount("Sales Revenue", 0, revenue, "REVENUE");
+
+      const expenseTotal = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+      addToAccount("Operating Expenses", expenseTotal, 0, "EXPENSE");
+
+      const salaryTotal = salaries.reduce((sum, s) => sum + (s.amount || 0), 0);
+      if (salaryTotal > 0) addToAccount("Salary Expense", salaryTotal, 0, "EXPENSE");
+
+      const exportData = Array.from(accounts.entries()).map(([name, data]) => ({
+        accountName: name,
+        accountType: data.type,
+        debit: data.debit > data.credit ? data.debit - data.credit : 0,
+        credit: data.credit > data.debit ? data.credit - data.debit : 0,
+      }));
+
+      const totalDebit = exportData.reduce((sum, a) => sum + a.debit, 0);
+      const totalCredit = exportData.reduce((sum, a) => sum + a.credit, 0);
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.trialBalance;
+
+      if (format === "excel") {
+        await generateExcel(res, { ...config, data: exportData, companyName, summary: [{ label: "Total Debit", value: totalDebit }, { label: "Total Credit", value: totalCredit }] });
+      } else if (format === "pdf") {
+        generatePDF(res, { ...config, data: exportData, companyName, summary: [{ label: "Total Debit", value: totalDebit }, { label: "Total Credit", value: totalCredit }] });
+      } else {
+        res.status(400).json({ error: "Invalid format" });
+      }
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Fixed Asset Register Export
+  app.get("/api/reports/fixed-asset-register/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      const assets = await storage.getFixedAssets({});
+
+      const exportData = assets.map((asset) => {
+        const purchaseDate = new Date(asset.purchaseDate);
+        const yearsOwned = (new Date().getTime() - purchaseDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+        let depreciation = 0;
+        let currentValue = asset.purchaseValue;
+
+        if (asset.depreciationMethod === "STRAIGHT_LINE") {
+          const annual = (asset.purchaseValue - asset.salvageValue) / asset.usefulLifeYears;
+          depreciation = Math.min(annual * yearsOwned, asset.purchaseValue - asset.salvageValue);
+          currentValue = Math.max(asset.purchaseValue - depreciation, asset.salvageValue);
+        } else if (asset.depreciationMethod === "WRITTEN_DOWN") {
+          currentValue = asset.purchaseValue * Math.pow(1 - asset.depreciationRate / 100, yearsOwned);
+          currentValue = Math.max(currentValue, asset.salvageValue);
+          depreciation = asset.purchaseValue - currentValue;
+        }
+
+        return {
+          name: asset.name,
+          category: asset.category,
+          purchaseDate: new Date(asset.purchaseDate).toLocaleDateString("en-IN"),
+          purchaseValue: asset.purchaseValue,
+          depreciationMethod: asset.depreciationMethod === "STRAIGHT_LINE" ? "SLM" : asset.depreciationMethod === "WRITTEN_DOWN" ? "WDV" : "None",
+          accumulatedDepreciation: Math.round(depreciation * 100) / 100,
+          currentValue: Math.round(currentValue * 100) / 100,
+          status: asset.status,
+        };
+      });
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.fixedAssets;
+      const totalValue = exportData.reduce((sum, a) => sum + a.currentValue, 0);
+
+      if (format === "excel") {
+        await generateExcel(res, { ...config, data: exportData, companyName, summary: [{ label: "Total Current Value", value: totalValue }], orientation: "landscape" });
+      } else if (format === "pdf") {
+        generatePDF(res, { ...config, data: exportData, companyName, summary: [{ label: "Total Current Value", value: totalValue }], orientation: "landscape" });
+      } else {
+        res.status(400).json({ error: "Invalid format" });
+      }
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // GST Sales Register Export
+  app.get("/api/reports/gst/sales-register/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      const invoices = await storage.getInvoices({});
+      const clients = await storage.getClients({});
+      const clientMap = new Map(clients.map((c) => [c.id, c]));
+
+      const exportData = invoices.map((inv) => {
+        const client = clientMap.get(inv.clientId);
+        const taxableAmount = inv.subtotal || (inv.totalAmount || 0) / 1.18;
+        const gstAmount = (inv.totalAmount || 0) - taxableAmount;
+
+        return {
+          invoiceNumber: inv.invoiceNumber,
+          invoiceDate: new Date(inv.issueDate).toLocaleDateString("en-IN"),
+          clientName: client?.name || "Unknown",
+          gstin: client?.gstNumber || "Unregistered",
+          invoiceType: client?.gstNumber ? "B2B" : "B2C",
+          taxableValue: Math.round(taxableAmount * 100) / 100,
+          cgst: Math.round((gstAmount / 2) * 100) / 100,
+          sgst: Math.round((gstAmount / 2) * 100) / 100,
+          igst: 0,
+          invoiceValue: inv.totalAmount || 0,
+        };
+      });
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.gstSalesRegister;
+      const totalGst = exportData.reduce((sum, e) => sum + e.cgst + e.sgst, 0);
+
+      if (format === "excel") {
+        await generateExcel(res, { ...config, data: exportData, companyName, summary: [{ label: "Total GST Collected", value: totalGst }], orientation: "landscape" });
+      } else if (format === "pdf") {
+        generatePDF(res, { ...config, data: exportData, companyName, summary: [{ label: "Total GST Collected", value: totalGst }], orientation: "landscape" });
+      } else {
+        res.status(400).json({ error: "Invalid format" });
+      }
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // GST Purchase Register Export
+  app.get("/api/reports/gst/purchase-register/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      const expenses = await storage.getExpenses({});
+      const vendors = await storage.getVendors({});
+      const vendorMap = new Map(vendors.map((v) => [v.id, v]));
+
+      const exportData = expenses.filter((e) => e.amount && e.amount > 0).map((exp, i) => {
+        const vendor = exp.vendorId ? vendorMap.get(exp.vendorId) : null;
+        const total = exp.amount || 0;
+        const taxable = total / 1.18;
+        const gst = total - taxable;
+
+        return {
+          voucherNumber: exp.reference || `EXP-${String(i + 1).padStart(4, "0")}`,
+          voucherDate: new Date(exp.expenseDate).toLocaleDateString("en-IN"),
+          vendorName: vendor?.name || "General",
+          gstin: vendor?.gstNumber || "Unregistered",
+          description: exp.description,
+          taxableValue: Math.round(taxable * 100) / 100,
+          totalGst: Math.round(gst * 100) / 100,
+          totalValue: total,
+          itcEligible: vendor?.gstNumber ? "Yes" : "No",
+        };
+      });
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.gstPurchaseRegister;
+      const eligibleItc = exportData.filter((e) => e.itcEligible === "Yes").reduce((sum, e) => sum + e.totalGst, 0);
+
+      if (format === "excel") {
+        await generateExcel(res, { ...config, data: exportData, companyName, summary: [{ label: "Eligible ITC", value: eligibleItc }], orientation: "landscape" });
+      } else if (format === "pdf") {
+        generatePDF(res, { ...config, data: exportData, companyName, summary: [{ label: "Eligible ITC", value: eligibleItc }], orientation: "landscape" });
+      } else {
+        res.status(400).json({ error: "Invalid format" });
+      }
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // GSTR-3B Summary Export
+  app.get("/api/reports/gst/gstr3b-summary/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      const invoices = await storage.getInvoices({});
+      const expenses = await storage.getExpenses({});
+      const vendors = await storage.getVendors({});
+      const vendorMap = new Map(vendors.map((v) => [v.id, v]));
+
+      let outputTaxable = 0, outputCgst = 0, outputSgst = 0;
+      invoices.forEach((inv) => {
+        const taxable = inv.subtotal || (inv.totalAmount || 0) / 1.18;
+        const gst = (inv.totalAmount || 0) - taxable;
+        outputTaxable += taxable;
+        outputCgst += gst / 2;
+        outputSgst += gst / 2;
+      });
+
+      let inputTaxable = 0, inputCgst = 0, inputSgst = 0;
+      expenses.forEach((exp) => {
+        const vendor = exp.vendorId ? vendorMap.get(exp.vendorId) : null;
+        if (vendor?.gstNumber) {
+          const total = exp.amount || 0;
+          const taxable = total / 1.18;
+          const gst = total - taxable;
+          inputTaxable += taxable;
+          inputCgst += gst / 2;
+          inputSgst += gst / 2;
+        }
+      });
+
+      const netCgst = Math.max(0, outputCgst - inputCgst);
+      const netSgst = Math.max(0, outputSgst - inputSgst);
+
+      const exportData = [
+        { particulars: "3.1 Outward Supplies", taxableValue: Math.round(outputTaxable * 100) / 100, cgst: Math.round(outputCgst * 100) / 100, sgst: Math.round(outputSgst * 100) / 100, igst: 0, total: Math.round((outputCgst + outputSgst) * 100) / 100 },
+        { particulars: "4. Input Tax Credit", taxableValue: Math.round(inputTaxable * 100) / 100, cgst: Math.round(inputCgst * 100) / 100, sgst: Math.round(inputSgst * 100) / 100, igst: 0, total: Math.round((inputCgst + inputSgst) * 100) / 100 },
+        { particulars: "6.1 Net Tax Payable", taxableValue: "", cgst: Math.round(netCgst * 100) / 100, sgst: Math.round(netSgst * 100) / 100, igst: 0, total: Math.round((netCgst + netSgst) * 100) / 100 },
+      ];
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.gstr3bSummary;
+
+      if (format === "excel") {
+        await generateExcel(res, { ...config, data: exportData, companyName, dateRange: `For ${new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" })}` });
+      } else if (format === "pdf") {
+        generatePDF(res, { ...config, data: exportData, companyName, dateRange: `For ${new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" })}` });
+      } else {
+        res.status(400).json({ error: "Invalid format" });
+      }
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // HSN Summary Export
+  app.get("/api/reports/gst/hsn-summary/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      const invoices = await storage.getInvoices({});
+
+      const sacCode = "998313";
+      const desc = "Advertising Services";
+      let quantity = 0, taxableValue = 0, cgst = 0, sgst = 0;
+
+      invoices.forEach((inv) => {
+        const taxable = inv.subtotal || (inv.totalAmount || 0) / 1.18;
+        const gst = (inv.totalAmount || 0) - taxable;
+        quantity++;
+        taxableValue += taxable;
+        cgst += gst / 2;
+        sgst += gst / 2;
+      });
+
+      const exportData = [{
+        hsnCode: sacCode,
+        description: desc,
+        quantity,
+        taxableValue: Math.round(taxableValue * 100) / 100,
+        cgst: Math.round(cgst * 100) / 100,
+        sgst: Math.round(sgst * 100) / 100,
+        totalTax: Math.round((cgst + sgst) * 100) / 100,
+      }];
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.hsnSummary;
+
+      if (format === "excel") {
+        await generateExcel(res, { ...config, data: exportData, companyName });
+      } else if (format === "pdf") {
+        generatePDF(res, { ...config, data: exportData, companyName });
+      } else {
+        res.status(400).json({ error: "Invalid format" });
+      }
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // GST Rate Summary Export
+  app.get("/api/reports/gst/rate-summary/export/:format", authenticateToken, async (req, res) => {
+    try {
+      const { format } = req.params;
+      const invoices = await storage.getInvoices({});
+
+      const rate = 18;
+      let invoiceCount = 0, taxableValue = 0, cgst = 0, sgst = 0, invoiceValue = 0;
+
+      invoices.forEach((inv) => {
+        const taxable = inv.subtotal || (inv.totalAmount || 0) / 1.18;
+        const gst = (inv.totalAmount || 0) - taxable;
+        invoiceCount++;
+        taxableValue += taxable;
+        cgst += gst / 2;
+        sgst += gst / 2;
+        invoiceValue += inv.totalAmount || 0;
+      });
+
+      const exportData = [{
+        rate: `${rate}%`,
+        invoiceCount,
+        taxableValue: Math.round(taxableValue * 100) / 100,
+        cgst: Math.round(cgst * 100) / 100,
+        sgst: Math.round(sgst * 100) / 100,
+        igst: 0,
+        totalTax: Math.round((cgst + sgst) * 100) / 100,
+        invoiceValue: Math.round(invoiceValue * 100) / 100,
+      }];
+
+      const companyName = await getCompanyInfo();
+      const config = reportConfigs.gstRateSummary;
+
+      if (format === "excel") {
+        await generateExcel(res, { ...config, data: exportData, companyName, orientation: "landscape" });
+      } else if (format === "pdf") {
+        generatePDF(res, { ...config, data: exportData, companyName, orientation: "landscape" });
+      } else {
+        res.status(400).json({ error: "Invalid format" });
+      }
     } catch (error: any) {
       res.status(500).send(error.message);
     }
@@ -4214,6 +5158,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(logs);
     } catch (error: any) {
       res.status(500).send(error.message);
+    }
+  });
+
+  // ============================================
+  // PAYMENT GATEWAY SETTINGS
+  // ============================================
+
+  // Get payment gateway settings
+  app.get("/api/settings/payment-gateway", authenticateToken, async (req, res) => {
+    try {
+      const settings = await storage.getPaymentGatewaySettings();
+      if (!settings) {
+        // Return default settings if none exist
+        res.json({
+          activeGateway: "NONE",
+          stripe: { publicKey: "", secretKey: "", webhookSecret: "", isTestMode: true },
+          razorpay: { keyId: "", keySecret: "", webhookSecret: "", isTestMode: true },
+          enabledMethods: ["card"],
+          currency: "INR",
+          isActive: false,
+        });
+        return;
+      }
+      // Mask sensitive keys for display
+      res.json({
+        ...settings,
+        stripe: {
+          ...settings.stripe,
+          secretKey: settings.stripe.secretKey ? "••••••••" + settings.stripe.secretKey.slice(-4) : "",
+          webhookSecret: settings.stripe.webhookSecret ? "••••••••" + settings.stripe.webhookSecret.slice(-4) : "",
+        },
+        razorpay: {
+          ...settings.razorpay,
+          keySecret: settings.razorpay.keySecret ? "••••••••" + settings.razorpay.keySecret.slice(-4) : "",
+          webhookSecret: settings.razorpay.webhookSecret ? "••••••••" + settings.razorpay.webhookSecret.slice(-4) : "",
+        },
+      });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Get full payment gateway settings (for internal use - not masked)
+  app.get("/api/settings/payment-gateway/full", authenticateToken, async (req, res) => {
+    try {
+      const settings = await storage.getPaymentGatewaySettings();
+      res.json(settings);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Create/update payment gateway settings
+  app.post("/api/settings/payment-gateway", authenticateToken, async (req, res) => {
+    try {
+      const existingSettings = await storage.getPaymentGatewaySettings();
+
+      // If updating, merge with existing (to preserve masked fields)
+      let dataToSave = req.body;
+      if (existingSettings) {
+        // Preserve existing secrets if new ones are masked
+        if (dataToSave.stripe?.secretKey?.startsWith("••••")) {
+          dataToSave.stripe.secretKey = existingSettings.stripe.secretKey;
+        }
+        if (dataToSave.stripe?.webhookSecret?.startsWith("••••")) {
+          dataToSave.stripe.webhookSecret = existingSettings.stripe.webhookSecret;
+        }
+        if (dataToSave.razorpay?.keySecret?.startsWith("••••")) {
+          dataToSave.razorpay.keySecret = existingSettings.razorpay.keySecret;
+        }
+        if (dataToSave.razorpay?.webhookSecret?.startsWith("••••")) {
+          dataToSave.razorpay.webhookSecret = existingSettings.razorpay.webhookSecret;
+        }
+      }
+
+      const settings = await storage.savePaymentGatewaySettings(dataToSave);
+      res.json(settings);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Test payment gateway connection
+  app.post("/api/settings/payment-gateway/test", authenticateToken, async (req, res) => {
+    try {
+      const { gateway } = req.body;
+      const settings = await storage.getPaymentGatewaySettings();
+
+      if (!settings) {
+        res.status(400).json({ success: false, error: "No payment gateway settings configured" });
+        return;
+      }
+
+      if (gateway === "STRIPE") {
+        // Test Stripe connection
+        if (!settings.stripe.secretKey) {
+          res.status(400).json({ success: false, error: "Stripe secret key not configured" });
+          return;
+        }
+        try {
+          const stripe = await import("stripe");
+          const stripeClient = new stripe.default(settings.stripe.secretKey);
+          await stripeClient.balance.retrieve();
+          res.json({ success: true, message: "Stripe connection successful" });
+        } catch (stripeError: any) {
+          res.status(400).json({ success: false, error: `Stripe error: ${stripeError.message}` });
+        }
+      } else if (gateway === "RAZORPAY") {
+        // Test Razorpay connection
+        if (!settings.razorpay.keyId || !settings.razorpay.keySecret) {
+          res.status(400).json({ success: false, error: "Razorpay credentials not configured" });
+          return;
+        }
+        try {
+          const Razorpay = await import("razorpay");
+          const razorpayClient = new Razorpay.default({
+            key_id: settings.razorpay.keyId,
+            key_secret: settings.razorpay.keySecret,
+          });
+          // Try fetching payments to verify connection
+          await razorpayClient.payments.all({ count: 1 });
+          res.json({ success: true, message: "Razorpay connection successful" });
+        } catch (razorpayError: any) {
+          res.status(400).json({ success: false, error: `Razorpay error: ${razorpayError.message}` });
+        }
+      } else {
+        res.status(400).json({ success: false, error: "Invalid gateway specified" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 

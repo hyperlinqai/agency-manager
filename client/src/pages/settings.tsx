@@ -51,6 +51,10 @@ import {
   Users,
   RefreshCw,
   Clock,
+  CreditCard,
+  Zap,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import {
   Dialog,
@@ -64,7 +68,7 @@ import { JobRoleDialog } from "@/components/job-role-dialog";
 import { ExpenseCategoryDialog } from "@/components/expense-category-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
-import type { Service, CompanyProfile, JobRole, ExpenseCategory, LeaveType, LeavePolicyWithDetails, SlackSettings } from "@shared/schema";
+import type { Service, CompanyProfile, JobRole, ExpenseCategory, LeaveType, LeavePolicyWithDetails, SlackSettings, PaymentGatewaySettings } from "@shared/schema";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -250,7 +254,7 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="services" className="w-full">
-        <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-flex">
+        <TabsList className="grid w-full grid-cols-8 lg:w-auto lg:inline-flex">
           <TabsTrigger value="services" className="gap-2" data-testid="tab-services">
             <Package className="h-4 w-4 hidden sm:inline" />
             Services
@@ -270,6 +274,10 @@ export default function SettingsPage() {
           <TabsTrigger value="slack" className="gap-2" data-testid="tab-slack">
             <MessageSquare className="h-4 w-4 hidden sm:inline" />
             Slack
+          </TabsTrigger>
+          <TabsTrigger value="integrations" className="gap-2" data-testid="tab-integrations">
+            <CreditCard className="h-4 w-4 hidden sm:inline" />
+            Payments
           </TabsTrigger>
           <TabsTrigger value="api-keys" className="gap-2" data-testid="tab-api-keys">
             <Key className="h-4 w-4 hidden sm:inline" />
@@ -568,6 +576,11 @@ export default function SettingsPage() {
         {/* API Keys Tab */}
         <TabsContent value="api-keys" className="space-y-4 mt-6">
           <APIKeysSettings />
+        </TabsContent>
+
+        {/* Payment Integrations Tab */}
+        <TabsContent value="integrations" className="space-y-4 mt-6">
+          <PaymentIntegrationsSettings />
         </TabsContent>
 
         {/* Company Tab */}
@@ -2629,6 +2642,418 @@ function SlackIntegrationSettings() {
               <p className="text-sm text-muted-foreground">
                 To track attendance, link each team member's Slack account in the Team Management section.
                 Go to Team → Edit Member → Connect Slack Account.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// Payment Integrations Settings Component
+function PaymentIntegrationsSettings() {
+  const { toast } = useToast();
+  const [activeGateway, setActiveGateway] = useState<"NONE" | "STRIPE" | "RAZORPAY">("NONE");
+  const [isTestMode, setIsTestMode] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+
+  // Stripe fields
+  const [stripePublicKey, setStripePublicKey] = useState("");
+  const [stripeSecretKey, setStripeSecretKey] = useState("");
+  const [stripeWebhookSecret, setStripeWebhookSecret] = useState("");
+  const [showStripeSecret, setShowStripeSecret] = useState(false);
+
+  // Razorpay fields
+  const [razorpayKeyId, setRazorpayKeyId] = useState("");
+  const [razorpayKeySecret, setRazorpayKeySecret] = useState("");
+  const [razorpayWebhookSecret, setRazorpayWebhookSecret] = useState("");
+  const [showRazorpaySecret, setShowRazorpaySecret] = useState(false);
+
+  // Fetch existing settings
+  const { data: paymentSettings, isLoading, refetch } = useQuery<PaymentGatewaySettings | null>({
+    queryKey: ["/api/settings/payment-gateway"],
+  });
+
+  // Update form when settings are loaded
+  useEffect(() => {
+    if (paymentSettings) {
+      setActiveGateway(paymentSettings.activeGateway || "NONE");
+      setIsTestMode(paymentSettings.stripe?.isTestMode ?? true);
+      setStripePublicKey(paymentSettings.stripe?.publicKey || "");
+      setStripeSecretKey(paymentSettings.stripe?.secretKey || "");
+      setStripeWebhookSecret(paymentSettings.stripe?.webhookSecret || "");
+      setRazorpayKeyId(paymentSettings.razorpay?.keyId || "");
+      setRazorpayKeySecret(paymentSettings.razorpay?.keySecret || "");
+      setRazorpayWebhookSecret(paymentSettings.razorpay?.webhookSecret || "");
+    }
+  }, [paymentSettings]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await apiRequest("POST", "/api/settings/payment-gateway", {
+        activeGateway,
+        stripe: {
+          publicKey: stripePublicKey,
+          secretKey: stripeSecretKey,
+          webhookSecret: stripeWebhookSecret,
+          isTestMode,
+        },
+        razorpay: {
+          keyId: razorpayKeyId,
+          keySecret: razorpayKeySecret,
+          webhookSecret: razorpayWebhookSecret,
+          isTestMode,
+        },
+        isActive: activeGateway !== "NONE",
+        currency: "INR",
+        enabledMethods: ["card", "upi", "netbanking"],
+      });
+
+      toast({
+        title: "Settings Saved",
+        description: "Payment gateway settings have been updated successfully.",
+      });
+      refetch();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save payment settings",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const testConnection = async () => {
+    if (activeGateway === "NONE") {
+      toast({
+        title: "No Gateway Selected",
+        description: "Please select a payment gateway first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setTestingConnection(true);
+    try {
+      // First save the settings
+      await handleSave();
+
+      const response = await apiRequest("POST", "/api/settings/payment-gateway/test", {
+        gateway: activeGateway,
+      });
+
+      toast({
+        title: "Connection Successful",
+        description: `${activeGateway} connection is working properly.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Connection Failed",
+        description: error.message || `Failed to connect to ${activeGateway}`,
+        variant: "destructive",
+      });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Gateway Selection */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <CreditCard className="h-5 w-5" />
+            Payment Gateway
+          </CardTitle>
+          <CardDescription>
+            Configure your preferred payment gateway for processing online payments
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Gateway Selection */}
+          <div className="space-y-3">
+            <label className="text-sm font-medium">Select Payment Gateway</label>
+            <div className="grid grid-cols-3 gap-4">
+              <button
+                type="button"
+                onClick={() => setActiveGateway("NONE")}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  activeGateway === "NONE"
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/50"
+                }`}
+              >
+                <div className="flex flex-col items-center gap-2">
+                  <XCircle className="h-8 w-8 text-muted-foreground" />
+                  <span className="font-medium">None</span>
+                  <span className="text-xs text-muted-foreground">Disabled</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveGateway("STRIPE")}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  activeGateway === "STRIPE"
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/50"
+                }`}
+              >
+                <div className="flex flex-col items-center gap-2">
+                  <div className="h-8 w-8 bg-[#635BFF] rounded flex items-center justify-center">
+                    <span className="text-white font-bold text-sm">S</span>
+                  </div>
+                  <span className="font-medium">Stripe</span>
+                  <span className="text-xs text-muted-foreground">International</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveGateway("RAZORPAY")}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  activeGateway === "RAZORPAY"
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/50"
+                }`}
+              >
+                <div className="flex flex-col items-center gap-2">
+                  <div className="h-8 w-8 bg-[#072654] rounded flex items-center justify-center">
+                    <span className="text-white font-bold text-sm">R</span>
+                  </div>
+                  <span className="font-medium">Razorpay</span>
+                  <span className="text-xs text-muted-foreground">India</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Test Mode Toggle */}
+          {activeGateway !== "NONE" && (
+            <div className="flex items-center justify-between p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600" />
+                <div>
+                  <p className="font-medium text-sm">Test Mode</p>
+                  <p className="text-xs text-muted-foreground">
+                    Use test/sandbox credentials for development
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={isTestMode}
+                onCheckedChange={setIsTestMode}
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Stripe Configuration */}
+      {activeGateway === "STRIPE" && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <div className="h-6 w-6 bg-[#635BFF] rounded flex items-center justify-center">
+                <span className="text-white font-bold text-xs">S</span>
+              </div>
+              Stripe Configuration
+            </CardTitle>
+            <CardDescription>
+              Enter your Stripe API credentials. Get them from your{" "}
+              <a
+                href="https://dashboard.stripe.com/apikeys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Stripe Dashboard
+              </a>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Publishable Key</label>
+              <Input
+                type="text"
+                value={stripePublicKey}
+                onChange={(e) => setStripePublicKey(e.target.value)}
+                placeholder={isTestMode ? "pk_test_..." : "pk_live_..."}
+                className="font-mono text-sm"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Secret Key</label>
+              <div className="relative">
+                <Input
+                  type={showStripeSecret ? "text" : "password"}
+                  value={stripeSecretKey}
+                  onChange={(e) => setStripeSecretKey(e.target.value)}
+                  placeholder={isTestMode ? "sk_test_..." : "sk_live_..."}
+                  className="pr-10 font-mono text-sm"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                  onClick={() => setShowStripeSecret(!showStripeSecret)}
+                >
+                  {showStripeSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Webhook Secret (Optional)</label>
+              <Input
+                type="text"
+                value={stripeWebhookSecret}
+                onChange={(e) => setStripeWebhookSecret(e.target.value)}
+                placeholder="whsec_..."
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Required for handling payment events. Configure webhook at Stripe Dashboard → Webhooks
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Razorpay Configuration */}
+      {activeGateway === "RAZORPAY" && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <div className="h-6 w-6 bg-[#072654] rounded flex items-center justify-center">
+                <span className="text-white font-bold text-xs">R</span>
+              </div>
+              Razorpay Configuration
+            </CardTitle>
+            <CardDescription>
+              Enter your Razorpay API credentials. Get them from your{" "}
+              <a
+                href="https://dashboard.razorpay.com/app/keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Razorpay Dashboard
+              </a>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Key ID</label>
+              <Input
+                type="text"
+                value={razorpayKeyId}
+                onChange={(e) => setRazorpayKeyId(e.target.value)}
+                placeholder={isTestMode ? "rzp_test_..." : "rzp_live_..."}
+                className="font-mono text-sm"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Key Secret</label>
+              <div className="relative">
+                <Input
+                  type={showRazorpaySecret ? "text" : "password"}
+                  value={razorpayKeySecret}
+                  onChange={(e) => setRazorpayKeySecret(e.target.value)}
+                  placeholder="Enter your key secret"
+                  className="pr-10 font-mono text-sm"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                  onClick={() => setShowRazorpaySecret(!showRazorpaySecret)}
+                >
+                  {showRazorpaySecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Webhook Secret (Optional)</label>
+              <Input
+                type="text"
+                value={razorpayWebhookSecret}
+                onChange={(e) => setRazorpayWebhookSecret(e.target.value)}
+                placeholder="Enter webhook secret"
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Required for handling payment events. Configure at Razorpay Dashboard → Webhooks
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Actions */}
+      {activeGateway !== "NONE" && (
+        <div className="flex items-center gap-3">
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                Save Settings
+              </>
+            )}
+          </Button>
+          <Button variant="outline" onClick={testConnection} disabled={testingConnection}>
+            {testingConnection ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Testing...
+              </>
+            ) : (
+              <>
+                <Zap className="h-4 w-4 mr-2" />
+                Test Connection
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
+      {/* Info Card */}
+      <Card className="border-0 shadow-sm bg-muted/30">
+        <CardContent className="pt-6">
+          <div className="flex gap-3">
+            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <CreditCard className="h-4 w-4 text-primary" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-medium">Payment Integration</h4>
+              <p className="text-sm text-muted-foreground">
+                Once configured, you can accept online payments directly from invoices.
+                Clients will be able to pay using credit/debit cards, UPI, and net banking.
               </p>
             </div>
           </div>
