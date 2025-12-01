@@ -311,6 +311,20 @@ export default function InvoiceDetailPage() {
                     <span className="text-muted-foreground">Subtotal:</span>
                     <span className="font-mono" data-testid="text-subtotal">{formatCurrency(invoice.subtotal)}</span>
                   </div>
+                  {(invoice.discount || 0) > 0 && (
+                    <div className="flex justify-between text-sm text-orange-600">
+                      <span>
+                        Discount {invoice.discountType === "PERCENTAGE" ? `(${invoice.discount}%)` : ""}:
+                      </span>
+                      <span className="font-mono" data-testid="text-discount">
+                        -{formatCurrency(
+                          invoice.discountType === "PERCENTAGE"
+                            ? (invoice.subtotal * invoice.discount) / 100
+                            : invoice.discount
+                        )}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Tax:</span>
                     <span className="font-mono" data-testid="text-tax">{formatCurrency(invoice.taxAmount)}</span>

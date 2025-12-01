@@ -134,6 +134,8 @@ export interface Invoice {
   dueDate: Date;
   currency: string;
   subtotal: number;
+  discount: number;
+  discountType: "PERCENTAGE" | "FIXED";
   taxAmount: number;
   totalAmount: number;
   amountPaid: number;
@@ -152,6 +154,8 @@ export const insertInvoiceSchema = z.object({
   dueDate: z.string().or(z.date()),
   currency: z.string().default("INR"),
   subtotal: z.number().min(0),
+  discount: z.number().min(0).default(0),
+  discountType: z.enum(["PERCENTAGE", "FIXED"]).default("FIXED"),
   taxAmount: z.number().min(0),
   totalAmount: z.number().min(0),
   status: z.enum(invoiceStatuses).default("DRAFT"),

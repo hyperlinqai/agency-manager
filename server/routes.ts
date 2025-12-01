@@ -69,9 +69,13 @@ function authenticateToken(req: any, res: any, next: any) {
   jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
     if (err) {
       console.error("JWT verification error:", err.message);
-      return res.status(403).json({ 
-        error: "Invalid token", 
-        message: err.message === "jwt expired" ? "Token has expired. Please login again." : "Invalid or malformed token" 
+      // Return 401 for expired tokens so client can attempt refresh
+      // Return 403 for other token errors (malformed, invalid signature, etc.)
+      const statusCode = err.message === "jwt expired" ? 401 : 403;
+      return res.status(statusCode).json({ 
+        error: err.message === "jwt expired" ? "Token expired" : "Invalid token", 
+        message: err.message === "jwt expired" ? "Token has expired" : "Invalid or malformed token",
+        expired: err.message === "jwt expired"
       });
     }
     req.user = user;

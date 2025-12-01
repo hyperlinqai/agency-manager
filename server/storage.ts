@@ -124,6 +124,8 @@ export interface IStorage {
     dueDate: string | Date;
     currency: string;
     subtotal: number;
+    discount?: number;
+    discountType?: "PERCENTAGE" | "FIXED";
     taxAmount: number;
     totalAmount: number;
     status: string;
@@ -796,6 +798,8 @@ export class DatabaseStorage implements IStorage {
       dueDate: new Date(invoice.dueDate),
       currency: invoice.currency,
       subtotal: invoice.subtotal,
+      discount: invoice.discount || 0,
+      discountType: invoice.discountType || "FIXED",
       taxAmount: invoice.taxAmount,
       totalAmount: invoice.totalAmount,
       amountPaid: 0,

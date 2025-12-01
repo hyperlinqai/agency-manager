@@ -52,6 +52,8 @@ const invoiceFormSchema = z.object({
   issueDate: z.string(),
   dueDate: z.string(),
   taxRate: z.number().min(0).max(100),
+  discount: z.number().min(0).default(0),
+  discountType: z.enum(["PERCENTAGE", "FIXED"]).default("FIXED"),
   notes: z.string().optional(),
   lineItems: z.array(
     z.object({
@@ -82,6 +84,8 @@ export default function InvoiceCreatePage() {
       issueDate: format(new Date(), "yyyy-MM-dd"),
       dueDate: format(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
       taxRate: 18,
+      discount: 0,
+      discountType: "FIXED",
       notes: "",
       lineItems: [{ description: "", quantity: 1, unitPrice: 0 }],
       status: "DRAFT",
@@ -115,13 +119,22 @@ export default function InvoiceCreatePage() {
 
   const lineItems = form.watch("lineItems");
   const taxRate = form.watch("taxRate");
+  const discount = form.watch("discount") || 0;
+  const discountType = form.watch("discountType") || "FIXED";
 
   const subtotal = lineItems.reduce(
     (sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0),
     0
   );
-  const taxAmount = (subtotal * (taxRate || 0)) / 100;
-  const total = subtotal + taxAmount;
+  
+  // Calculate discount amount
+  const discountAmount = discountType === "PERCENTAGE"
+    ? (subtotal * discount) / 100
+    : discount;
+  
+  const afterDiscount = Math.max(0, subtotal - discountAmount);
+  const taxAmount = (afterDiscount * (taxRate || 0)) / 100;
+  const total = afterDiscount + taxAmount;
 
   const handleAddService = (service: Service) => {
     if (!service.defaultPrice || service.defaultPrice <= 0) {
@@ -155,6 +168,8 @@ export default function InvoiceCreatePage() {
         dueDate: data.dueDate,
         currency: "INR",
         subtotal,
+        discount: discount,
+        discountType: discountType,
         taxAmount,
         totalAmount: total,
         status: data.status,
@@ -310,6 +325,52 @@ export default function InvoiceCreatePage() {
                           {...field}
                           onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                           data-testid="input-tax-rate"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="discountType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Discount Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="FIXED">Fixed Amount</SelectItem>
+                          <SelectItem value="PERCENTAGE">Percentage</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="discount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Discount {discountType === "PERCENTAGE" ? "(%)" : "(Amount)"}
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0"
+                          {...field}
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          data-testid="input-discount"
                         />
                       </FormControl>
                       <FormMessage />
@@ -553,6 +614,12 @@ export default function InvoiceCreatePage() {
                     <span className="text-muted-foreground">Subtotal:</span>
                     <span className="font-mono" data-testid="text-subtotal">{formatCurrency(subtotal)}</span>
                   </div>
+                  {discount > 0 && (
+                    <div className="flex justify-between text-sm text-orange-600">
+                      <span>Discount {discountType === "PERCENTAGE" ? `(${discount}%)` : ""}:</span>
+                      <span className="font-mono" data-testid="text-discount">-{formatCurrency(discountAmount)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Tax ({taxRate}%):</span>
                     <span className="font-mono" data-testid="text-tax">{formatCurrency(taxAmount)}</span>

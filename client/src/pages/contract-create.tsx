@@ -101,10 +101,11 @@ export default function ContractCreatePage() {
 
   const { fields: deliverableFields, append: appendDeliverable, remove: removeDeliverable } = useFieldArray({
     control: form.control,
-    name: "deliverables" as any,
+    name: "deliverables",
   });
 
   const watchedClientId = form.watch("clientId");
+  const deliverables = form.watch("deliverables");
   const clientProposals = proposals?.filter(p => p.clientId === watchedClientId);
 
   const createContractMutation = useMutation({
@@ -133,7 +134,7 @@ export default function ContractCreatePage() {
 
   const handleAddDeliverable = () => {
     if (newDeliverable.trim()) {
-      appendDeliverable(newDeliverable.trim() as any);
+      appendDeliverable(newDeliverable.trim());
       setNewDeliverable("");
     }
   };
@@ -151,7 +152,7 @@ export default function ContractCreatePage() {
       
       // Set deliverables from services
       const deliverables = proposal.services?.flatMap(s => s.deliverables || []) || [];
-      form.setValue("deliverables", deliverables as any);
+      form.setValue("deliverables", deliverables);
     }
   };
 
@@ -183,7 +184,7 @@ export default function ContractCreatePage() {
             }
             if (content.deliverables && content.deliverables.length > 0) {
               // Clear existing deliverables and add new ones
-              form.setValue("deliverables", content.deliverables as any);
+              form.setValue("deliverables", content.deliverables);
             }
             if (content.termsAndConditions) {
               form.setValue("termsAndConditions", content.termsAndConditions);
@@ -401,15 +402,29 @@ export default function ContractCreatePage() {
                   <div className="mt-3 space-y-2">
                     {deliverableFields.map((field, index) => (
                       <div key={field.id} className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
-                        <span className="flex-1 text-sm">{(field as any)}</span>
+                        <FormField
+                          control={form.control}
+                          name={`deliverables.${index}`}
+                          render={({ field: inputField }) => (
+                            <FormItem className="flex-1">
+                              <FormControl>
+                                <Input
+                                  {...inputField}
+                                  className="text-sm bg-background"
+                                  placeholder="Deliverable item"
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6"
+                          className="h-8 w-8 shrink-0"
                           onClick={() => removeDeliverable(index)}
                         >
-                          <Trash2 className="h-3 w-3" />
+                          <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
                     ))}

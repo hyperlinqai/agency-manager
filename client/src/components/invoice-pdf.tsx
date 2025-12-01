@@ -764,6 +764,20 @@ export function InvoicePDF({ invoice, companyProfile, clientAddress, clientEmail
                 <Text style={styles.totalsLabel}>Subtotal</Text>
                 <Text style={styles.totalsValue}>{formatCurrency(invoice.subtotal)}</Text>
               </View>
+              {(invoice.discount || 0) > 0 && (
+                <View style={styles.totalsRow}>
+                  <Text style={[styles.totalsLabel, { color: "#ea580c" }]}>
+                    Discount {invoice.discountType === "PERCENTAGE" ? `(${invoice.discount}%)` : ""}
+                  </Text>
+                  <Text style={[styles.totalsValue, { color: "#ea580c" }]}>
+                    -{formatCurrency(
+                      invoice.discountType === "PERCENTAGE"
+                        ? (invoice.subtotal * invoice.discount) / 100
+                        : invoice.discount
+                    )}
+                  </Text>
+                </View>
+              )}
               <View style={styles.totalsRow}>
                 <Text style={styles.totalsLabel}>Tax ({taxRate}%)</Text>
                 <Text style={styles.totalsValue}>{formatCurrency(invoice.taxAmount)}</Text>
