@@ -48,6 +48,7 @@ import {
   Mail,
   MessageSquare,
   Hash,
+  Shield,
   Users,
   RefreshCw,
   Clock,
@@ -83,6 +84,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertCompanyProfileSchema } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { TwoFactorAuth } from "@/components/two-factor-auth";
 import { z } from "zod";
 
 export default function SettingsPage() {
@@ -254,7 +256,7 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="services" className="w-full">
-        <TabsList className="grid w-full grid-cols-8 lg:w-auto lg:inline-flex">
+        <TabsList className="grid w-full grid-cols-9 lg:w-auto lg:inline-flex">
           <TabsTrigger value="services" className="gap-2" data-testid="tab-services">
             <Package className="h-4 w-4 hidden sm:inline" />
             Services
@@ -282,6 +284,10 @@ export default function SettingsPage() {
           <TabsTrigger value="api-keys" className="gap-2" data-testid="tab-api-keys">
             <Key className="h-4 w-4 hidden sm:inline" />
             API Keys
+          </TabsTrigger>
+          <TabsTrigger value="security" className="gap-2" data-testid="tab-security">
+            <Shield className="h-4 w-4 hidden sm:inline" />
+            Security
           </TabsTrigger>
           <TabsTrigger value="company" className="gap-2" data-testid="tab-company">
             <Building2 className="h-4 w-4 hidden sm:inline" />
@@ -584,6 +590,11 @@ export default function SettingsPage() {
         </TabsContent>
 
         {/* Company Tab */}
+        {/* Security Tab */}
+        <TabsContent value="security" className="space-y-4 mt-6">
+          <TwoFactorAuth />
+        </TabsContent>
+
         <TabsContent value="company" className="space-y-4 mt-6">
           <CompanySettingsForm />
         </TabsContent>

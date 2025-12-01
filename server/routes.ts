@@ -6,6 +6,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { ToWords } from "to-words";
 import QRCode from "qrcode";
+import speakeasy from "speakeasy";
 import { upload, uploadToCloudinary, deleteFromCloudinary, getFileType } from "./cloudinary";
 import {
   generateProposalContent,
@@ -52,6 +53,9 @@ import {
 import { slackService } from "./slack-service";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "development-secret-key";
+const JWT_REFRESH_SECRET = process.env.REFRESH_SECRET || "development-refresh-secret-key";
+const ACCESS_TOKEN_EXPIRY = "15m"; // Short-lived access token
+const REFRESH_TOKEN_EXPIRY = "7d"; // Long-lived refresh token
 
 // Middleware to verify JWT token
 function authenticateToken(req: any, res: any, next: any) {
@@ -75,13 +79,31 @@ function authenticateToken(req: any, res: any, next: any) {
   });
 }
 
+// Role-based access control middleware
+function requireRole(...allowedRoles: string[]) {
+  return (req: any, res: any, next: any) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ 
+        error: "Forbidden", 
+        message: "You don't have permission to access this resource" 
+      });
+    }
+    
+    next();
+  };
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================
   // AUTH ROUTES
   // ============================================
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const { email, password } = req.body;
+      const { email, password, twoFactorCode } = req.body;
 
       if (!email || !password) {
         return res.status(400).send("Email and password are required");
@@ -97,10 +119,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).send("Invalid credentials");
       }
 
-      const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
+      // Check if 2FA is enabled
+      if (user.twoFactorEnabled) {
+        if (!twoFactorCode) {
+          return res.status(200).json({
+            requiresTwoFactor: true,
+            message: "Two-factor authentication code required",
+          });
+        }
+
+        // Verify 2FA code
+        if (!user.twoFactorSecret) {
+          return res.status(500).send("2FA is enabled but secret is missing");
+        }
+
+        const verified = speakeasy.totp.verify({
+          secret: user.twoFactorSecret,
+          encoding: "base32",
+          token: twoFactorCode,
+          window: 2, // Allow 2 time steps (60 seconds) of tolerance
+        });
+
+        if (!verified) {
+          return res.status(401).send("Invalid two-factor authentication code");
+        }
+      }
+
+      // Generate access token (short-lived)
+      const accessToken = jwt.sign(
+        { id: user.id, email: user.email, role: user.role, type: "access" },
         JWT_SECRET,
-        { expiresIn: "7d" }
+        { expiresIn: ACCESS_TOKEN_EXPIRY }
+      );
+
+      // Generate refresh token (long-lived)
+      const refreshToken = jwt.sign(
+        { id: user.id, email: user.email, role: user.role, type: "refresh" },
+        JWT_REFRESH_SECRET,
+        { expiresIn: REFRESH_TOKEN_EXPIRY }
       );
 
       res.json({
@@ -108,8 +164,375 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: user.name,
         email: user.email,
         role: user.role,
-        token,
+        token: accessToken,
+        refreshToken,
       });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Refresh token endpoint
+  app.post("/api/auth/refresh", async (req, res) => {
+    try {
+      const { refreshToken } = req.body;
+
+      if (!refreshToken) {
+        return res.status(400).json({ error: "Refresh token is required" });
+      }
+
+      jwt.verify(refreshToken, JWT_REFRESH_SECRET, async (err: any, decoded: any) => {
+        if (err || decoded.type !== "refresh") {
+          return res.status(403).json({ error: "Invalid refresh token" });
+        }
+
+        // Verify user still exists
+        const user = await storage.getUserById(decoded.id);
+        if (!user) {
+          return res.status(403).json({ error: "User not found" });
+        }
+
+        // Generate new access token
+        const accessToken = jwt.sign(
+          { id: user.id, email: user.email, role: user.role, type: "access" },
+          JWT_SECRET,
+          { expiresIn: ACCESS_TOKEN_EXPIRY }
+        );
+
+        res.json({
+          token: accessToken,
+        });
+      });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Get current user
+  app.get("/api/auth/me", authenticateToken, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      res.json({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        twoFactorEnabled: user.twoFactorEnabled || false,
+      });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // ============================================
+  // TWO-FACTOR AUTHENTICATION ROUTES
+  // ============================================
+
+  // Generate 2FA secret and QR code
+  app.post("/api/auth/2fa/generate", authenticateToken, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Generate a secret
+      const secret = speakeasy.generateSecret({
+        name: `${user.email} (Agency Manager)`,
+        issuer: "Agency Manager",
+        length: 32,
+      });
+
+      // Generate QR code
+      const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url || "");
+
+      // Store the secret temporarily (user needs to verify before enabling)
+      // We'll store it in the user record but mark 2FA as disabled
+      await storage.updateUser(user.id, {
+        twoFactorSecret: secret.base32,
+        twoFactorEnabled: false,
+      });
+
+      res.json({
+        secret: secret.base32,
+        qrCode: qrCodeUrl,
+        manualEntryKey: secret.base32,
+      });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Verify and enable 2FA
+  app.post("/api/auth/2fa/verify", authenticateToken, async (req, res) => {
+    try {
+      const { code } = req.body;
+
+      if (!code) {
+        return res.status(400).json({ error: "Verification code is required" });
+      }
+
+      const user = await storage.getUserById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      if (!user.twoFactorSecret) {
+        return res.status(400).json({ error: "2FA secret not found. Please generate a new secret first." });
+      }
+
+      // Verify the code
+      const verified = speakeasy.totp.verify({
+        secret: user.twoFactorSecret,
+        encoding: "base32",
+        token: code,
+        window: 2,
+      });
+
+      if (!verified) {
+        return res.status(400).json({ error: "Invalid verification code" });
+      }
+
+      // Enable 2FA
+      await storage.updateUser(user.id, {
+        twoFactorEnabled: true,
+      });
+
+      res.json({
+        success: true,
+        message: "Two-factor authentication has been enabled",
+      });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Disable 2FA
+  app.post("/api/auth/2fa/disable", authenticateToken, async (req, res) => {
+    try {
+      const { password, code } = req.body;
+
+      const user = await storage.getUserById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Verify password
+      if (!password) {
+        return res.status(400).json({ error: "Password is required to disable 2FA" });
+      }
+
+      const validPassword = await bcrypt.compare(password, user.passwordHash);
+      if (!validPassword) {
+        return res.status(401).json({ error: "Invalid password" });
+      }
+
+      // If 2FA is enabled, also require the 2FA code
+      if (user.twoFactorEnabled && user.twoFactorSecret) {
+        if (!code) {
+          return res.status(400).json({ error: "2FA code is required to disable 2FA" });
+        }
+
+        const verified = speakeasy.totp.verify({
+          secret: user.twoFactorSecret,
+          encoding: "base32",
+          token: code,
+          window: 2,
+        });
+
+        if (!verified) {
+          return res.status(401).json({ error: "Invalid 2FA code" });
+        }
+      }
+
+      // Disable 2FA and clear secret
+      await storage.updateUser(user.id, {
+        twoFactorEnabled: false,
+        twoFactorSecret: undefined,
+      });
+
+      res.json({
+        success: true,
+        message: "Two-factor authentication has been disabled",
+      });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Get 2FA status
+  app.get("/api/auth/2fa/status", authenticateToken, async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      res.json({
+        enabled: user.twoFactorEnabled || false,
+      });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // ============================================
+  // USER MANAGEMENT ROUTES (Admin/Manager Only)
+  // ============================================
+  
+  // Get all users
+  app.get("/api/users", authenticateToken, requireRole("ADMIN", "MANAGER"), async (req, res) => {
+    try {
+      const { role, search } = req.query;
+      const users = await storage.getUsers({
+        role: role as string,
+        search: search as string,
+      });
+      
+      // Remove password hashes from response
+      const safeUsers = users.map(({ passwordHash, ...user }) => user);
+      res.json(safeUsers);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Get user by ID
+  app.get("/api/users/:id", authenticateToken, requireRole("ADMIN", "MANAGER"), async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.params.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Remove password hash from response
+      const { passwordHash, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Create user (Admin only)
+  app.post("/api/users", authenticateToken, requireRole("ADMIN"), async (req, res) => {
+    try {
+      const { name, email, password, role } = req.body;
+
+      if (!name || !email || !password || !role) {
+        return res.status(400).json({ error: "Name, email, password, and role are required" });
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: "Invalid email format" });
+      }
+
+      // Validate password strength
+      if (password.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      }
+
+      // Validate role
+      const validRoles = ["ADMIN", "MANAGER", "STAFF"];
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ error: "Invalid role" });
+      }
+
+      // Hash password
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      const user = await storage.createUser({
+        name,
+        email,
+        passwordHash,
+        role,
+      });
+
+      // Remove password hash from response
+      const { passwordHash: _, ...safeUser } = user;
+      res.status(201).json(safeUser);
+    } catch (error: any) {
+      if (error.message.includes("already exists")) {
+        return res.status(409).json({ error: error.message });
+      }
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Update user
+  app.put("/api/users/:id", authenticateToken, requireRole("ADMIN", "MANAGER"), async (req, res) => {
+    try {
+      const { name, email, password, role } = req.body;
+      const userId = req.params.id;
+
+      // Managers can only update their own profile or staff users
+      if (req.user.role === "MANAGER") {
+        const targetUser = await storage.getUserById(userId);
+        if (!targetUser) {
+          return res.status(404).json({ error: "User not found" });
+        }
+        // Managers can't update admins or other managers
+        if (targetUser.role !== "STAFF" && targetUser.id !== req.user.id) {
+          return res.status(403).json({ error: "You don't have permission to update this user" });
+        }
+      }
+
+      const updateData: any = {};
+      if (name) updateData.name = name;
+      if (email) {
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          return res.status(400).json({ error: "Invalid email format" });
+        }
+        updateData.email = email;
+      }
+      if (password) {
+        // Validate password strength
+        if (password.length < 6) {
+          return res.status(400).json({ error: "Password must be at least 6 characters" });
+        }
+        updateData.passwordHash = await bcrypt.hash(password, 10);
+      }
+      // Only admins can change roles
+      if (role && req.user.role === "ADMIN") {
+        const validRoles = ["ADMIN", "MANAGER", "STAFF"];
+        if (!validRoles.includes(role)) {
+          return res.status(400).json({ error: "Invalid role" });
+        }
+        updateData.role = role;
+      }
+
+      const user = await storage.updateUser(userId, updateData);
+      
+      // Remove password hash from response
+      const { passwordHash, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (error: any) {
+      if (error.message.includes("already exists")) {
+        return res.status(409).json({ error: error.message });
+      }
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Delete user (Admin only)
+  app.delete("/api/users/:id", authenticateToken, requireRole("ADMIN"), async (req, res) => {
+    try {
+      const userId = req.params.id;
+
+      // Prevent deleting yourself
+      if (userId === req.user.id) {
+        return res.status(400).json({ error: "You cannot delete your own account" });
+      }
+
+      await storage.deleteUser(userId);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(500).send(error.message);
     }

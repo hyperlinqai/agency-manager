@@ -2,8 +2,8 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from "
 import { useLocation } from "wouter";
 
 interface AuthContextType {
-  user: { id: string; name: string; email: string; role: string; token: string } | null;
-  login: (email: string, password: string) => Promise<void>;
+  user: { id: string; name: string; email: string; role: string; token: string; refreshToken?: string } | null;
+  login: (email: string, password: string, twoFactorCode?: string) => Promise<{ requiresTwoFactor?: boolean } | void>;
   logout: () => void;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -28,11 +28,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, twoFactorCode?: string) => {
     const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, twoFactorCode }),
     });
 
     if (!response.ok) {
@@ -40,9 +40,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(error || "Login failed");
     }
 
-    const userData = await response.json();
-    setUser(userData);
-    localStorage.setItem("user", JSON.stringify(userData));
+    const data = await response.json();
+    
+    // Check if 2FA is required
+    if (data.requiresTwoFactor) {
+      return { requiresTwoFactor: true };
+    }
+
+    // Login successful
+    setUser(data);
+    localStorage.setItem("user", JSON.stringify(data));
   };
 
   const logout = () => {

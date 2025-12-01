@@ -12,6 +12,8 @@ export interface User {
   email: string;
   passwordHash: string;
   role: typeof userRoles[number];
+  twoFactorSecret?: string;
+  twoFactorEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

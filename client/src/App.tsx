@@ -23,6 +23,7 @@ import AttendancePage from "@/pages/attendance";
 import LeaveManagementPage from "@/pages/leave-management";
 import EmployeeOnboardingPage from "@/pages/employee-onboarding";
 import SettingsPage from "@/pages/settings";
+import UsersPage from "@/pages/users";
 import ProposalsPage from "@/pages/proposals";
 import ProposalCreatePage from "@/pages/proposal-create";
 import ContractsPage from "@/pages/contracts";
@@ -130,6 +131,13 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <SettingsPage />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/users">
+        {() => (
+          <ProtectedRoute>
+            <UsersPage />
           </ProtectedRoute>
         )}
       </Route>

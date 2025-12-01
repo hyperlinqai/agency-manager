@@ -74,9 +74,10 @@ const marketingItems = [
   { title: "Monthly Reports", url: "/monthly-reports", icon: BarChart3, testId: "link-monthly-reports" },
 ];
 
-// System - Settings
+// System - Settings and User Management
 const systemItems = [
   { title: "Settings", url: "/settings", icon: Settings, testId: "link-settings" },
+  { title: "Users", url: "/users", icon: Users, testId: "link-users", roles: ["ADMIN", "MANAGER"] },
 ];
 
 export function AppSidebar() {
@@ -136,40 +137,50 @@ export function AppSidebar() {
     return currentPath.startsWith(urlPath);
   };
 
-  const renderMenuItems = (items: typeof overviewItems) => (
-    <SidebarMenu className="gap-0.5">
-      {items.map((item) => {
-        const active = isActive(item.url);
-        return (
-          <SidebarMenuItem key={item.title}>
-            <SidebarMenuButton
-              asChild
-              isActive={active}
-              className={cn(
-                "group relative h-8 rounded-md transition-all duration-200",
-                active
-                  ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                  : "hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
-              )}
-            >
-              <Link href={item.url} data-testid={item.testId}>
-                <item.icon
-                  className={cn(
-                    "h-4 w-4 transition-transform duration-200",
-                    active ? "" : "group-hover:scale-110"
-                  )}
-                />
-                <span className="font-medium text-[13px]">{item.title}</span>
-                {active && (
-                  <ChevronRight className="ml-auto h-3.5 w-3.5 opacity-70" />
+  const renderMenuItems = (items: typeof overviewItems) => {
+    // Filter items based on user role
+    const filteredItems = items.filter((item: any) => {
+      if (item.roles && user) {
+        return item.roles.includes(user.role);
+      }
+      return true;
+    });
+
+    return (
+      <SidebarMenu className="gap-0.5">
+        {filteredItems.map((item: any) => {
+          const active = isActive(item.url);
+          return (
+            <SidebarMenuItem key={item.title}>
+              <SidebarMenuButton
+                asChild
+                isActive={active}
+                className={cn(
+                  "group relative h-8 rounded-md transition-all duration-200",
+                  active
+                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
+                    : "hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
                 )}
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        );
-      })}
-    </SidebarMenu>
-  );
+              >
+                <Link href={item.url} data-testid={item.testId}>
+                  <item.icon
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      active ? "" : "group-hover:scale-110"
+                    )}
+                  />
+                  <span className="font-medium text-[13px]">{item.title}</span>
+                  {active && (
+                    <ChevronRight className="ml-auto h-3.5 w-3.5 opacity-70" />
+                  )}
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          );
+        })}
+      </SidebarMenu>
+    );
+  };
 
   return (
     <Sidebar className="border-r-0">

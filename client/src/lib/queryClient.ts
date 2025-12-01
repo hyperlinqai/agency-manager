@@ -9,6 +9,50 @@ function getAuthToken(): string | null {
   return null;
 }
 
+function getRefreshToken(): string | null {
+  const storedUser = localStorage.getItem("user");
+  if (storedUser) {
+    const user = JSON.parse(storedUser);
+    return user.refreshToken;
+  }
+  return null;
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    return null;
+  }
+
+  try {
+    const response = await fetch("/api/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    const newToken = data.token;
+
+    // Update stored user with new token
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      const user = JSON.parse(storedUser);
+      user.token = newToken;
+      localStorage.setItem("user", JSON.stringify(user));
+    }
+
+    return newToken;
+  } catch (error) {
+    console.error("Token refresh failed:", error);
+    return null;
+  }
+}
+
 async function handleRequest(url: string, options: RequestInit = {}) {
   const token = getAuthToken();
   const headers: Record<string, string> = {
@@ -26,8 +70,33 @@ async function handleRequest(url: string, options: RequestInit = {}) {
   const responseClone = response.clone();
 
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      // Try to get error message from response
+    if (response.status === 401) {
+      // Try to refresh token on 401
+      const newToken = await refreshAccessToken();
+      
+      if (newToken) {
+        // Retry the request with new token
+        const retryHeaders: Record<string, string> = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${newToken}`,
+          ...(options.headers as Record<string, string>),
+        };
+        
+        const retryResponse = await fetch(url, {
+          ...options,
+          headers: retryHeaders,
+        });
+        
+        if (retryResponse.ok) {
+          const contentType = retryResponse.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            return retryResponse.json();
+          }
+          return retryResponse.text();
+        }
+      }
+      
+      // If refresh failed or retry failed, logout
       let errorMessage = "Authentication failed";
       try {
         const responseText = await responseClone.text();
@@ -46,6 +115,25 @@ async function handleRequest(url: string, options: RequestInit = {}) {
       console.error("Authentication error:", errorMessage);
       localStorage.removeItem("user");
       window.location.href = "/login";
+      throw new Error(errorMessage);
+    }
+    
+    if (response.status === 403) {
+      // Try to get error message from response
+      let errorMessage = "Access forbidden";
+      try {
+        const responseText = await responseClone.text();
+        if (responseText) {
+          try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } catch {
+            errorMessage = responseText;
+          }
+        }
+      } catch {
+        // Ignore parsing errors
+      }
       throw new Error(errorMessage);
     }
 

@@ -5,13 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Eye, EyeOff, Loader2, ArrowRight } from "lucide-react";
+import { Eye, EyeOff, Loader2, ArrowRight, Shield } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [twoFactorCode, setTwoFactorCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
   const { login, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -28,7 +30,18 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      await login(email, password);
+      const result = await login(email, password, twoFactorCode || undefined);
+      
+      if (result?.requiresTwoFactor) {
+        setRequiresTwoFactor(true);
+        setIsLoading(false);
+        toast({
+          title: "2FA Required",
+          description: "Please enter the code from your authenticator app",
+        });
+        return;
+      }
+
       toast({
         title: "Welcome back!",
         description: "Successfully logged in to Agency Manager",
@@ -40,6 +53,7 @@ export default function LoginPage() {
         variant: "destructive",
       });
       setIsLoading(false);
+      setRequiresTwoFactor(false);
     }
   };
 
@@ -157,6 +171,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  disabled={requiresTwoFactor}
                   className="h-11 px-4 pr-11 bg-background border-input focus:ring-2 focus:ring-primary/20 transition-all"
                   data-testid="input-password"
                 />
@@ -164,11 +179,36 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  disabled={requiresTwoFactor}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
+
+            {requiresTwoFactor && (
+              <div className="space-y-2">
+                <Label htmlFor="twoFactorCode" className="text-sm font-medium flex items-center gap-2">
+                  <Shield className="h-4 w-4" />
+                  Two-Factor Authentication Code
+                </Label>
+                <Input
+                  id="twoFactorCode"
+                  type="text"
+                  placeholder="000000"
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  maxLength={6}
+                  required
+                  className="h-11 px-4 text-center text-lg font-mono tracking-widest bg-background border-input focus:ring-2 focus:ring-primary/20 transition-all"
+                  data-testid="input-2fa-code"
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground">
+                  Enter the 6-digit code from your authenticator app
+                </p>
+              </div>
+            )}
 
             <Button
               type="submit"
@@ -189,27 +229,6 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
-
-          {/* Demo credentials */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Demo credentials</span>
-            </div>
-          </div>
-
-          <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Email:</span>
-              <code className="font-mono text-foreground">admin@agency.local</code>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Password:</span>
-              <code className="font-mono text-foreground">admin123</code>
-            </div>
-          </div>
 
           {/* Footer */}
           <p className="text-center text-xs text-muted-foreground">

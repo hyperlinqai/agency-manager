@@ -94,7 +94,11 @@ const toMongo = (doc: any): any => {
 export interface IStorage {
   // User methods
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserById(id: string): Promise<User | undefined>;
+  getUsers(filters?: { role?: string; search?: string }): Promise<User[]>;
   createUser(user: { name: string; email: string; passwordHash: string; role: string }): Promise<User>;
+  updateUser(id: string, user: Partial<{ name: string; email: string; passwordHash: string; role: string; twoFactorSecret?: string; twoFactorEnabled?: boolean }>): Promise<User>;
+  deleteUser(id: string): Promise<void>;
   
   // Client methods
   getClients(filters?: { status?: string; search?: string }): Promise<ClientWithStats[]>;
@@ -348,19 +352,97 @@ export class DatabaseStorage implements IStorage {
     return user ? toSchema<User>(user) : undefined;
   }
 
+  async getUserById(id: string): Promise<User | undefined> {
+    const db = await getDb();
+    const user = await db.collection("users").findOne({ id });
+    return user ? toSchema<User>(user) : undefined;
+  }
+
+  async getUsers(filters?: { role?: string; search?: string }): Promise<User[]> {
+    const db = await getDb();
+    const query: any = {};
+    
+    if (filters?.role) {
+      query.role = filters.role;
+    }
+    
+    if (filters?.search) {
+      query.$or = [
+        { name: { $regex: filters.search, $options: "i" } },
+        { email: { $regex: filters.search, $options: "i" } },
+      ];
+    }
+    
+    const users = await db.collection("users").find(query).sort({ createdAt: -1 }).toArray();
+    return users.map((user) => toSchema<User>(user));
+  }
+
   async createUser(user: { name: string; email: string; passwordHash: string; role: string }): Promise<User> {
     const db = await getDb();
+    
+    // Check if user with email already exists
+    const existingUser = await db.collection("users").findOne({ email: user.email });
+    if (existingUser) {
+      throw new Error("User with this email already exists");
+    }
+    
     const newUser = {
       id: nanoid(),
       name: user.name,
       email: user.email,
       passwordHash: user.passwordHash,
       role: user.role,
+      twoFactorEnabled: false,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
     await db.collection("users").insertOne(toMongo(newUser));
     return toSchema<User>(newUser);
+  }
+
+  async updateUser(id: string, user: Partial<{ name: string; email: string; passwordHash: string; role: string; twoFactorSecret?: string; twoFactorEnabled?: boolean }>): Promise<User> {
+    const db = await getDb();
+    
+    // Check if email is being updated and if it's already taken
+    if (user.email) {
+      const existingUser = await db.collection("users").findOne({ email: user.email, id: { $ne: id } });
+      if (existingUser) {
+        throw new Error("User with this email already exists");
+      }
+    }
+    
+    const updateData: any = {
+      ...user,
+      updatedAt: new Date(),
+    };
+    
+    // Handle twoFactorSecret: if explicitly set to undefined, remove it
+    if (user.twoFactorSecret === undefined && 'twoFactorSecret' in user) {
+      await db.collection("users").updateOne({ id }, { $unset: { twoFactorSecret: "" } });
+      delete updateData.twoFactorSecret;
+    }
+    
+    // Remove undefined fields (except twoFactorSecret which is handled above)
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined && key !== 'twoFactorSecret') {
+        delete updateData[key];
+      }
+    });
+    
+    await db.collection("users").updateOne({ id }, { $set: toMongo(updateData) });
+    const updatedUser = await db.collection("users").findOne({ id });
+    if (!updatedUser) {
+      throw new Error("User not found");
+    }
+    return toSchema<User>(updatedUser);
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    const db = await getDb();
+    const result = await db.collection("users").deleteOne({ id });
+    if (result.deletedCount === 0) {
+      throw new Error("User not found");
+    }
   }
 
   // Client methods
